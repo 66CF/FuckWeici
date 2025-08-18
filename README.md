@@ -27,7 +27,6 @@
 - [uiautomator2 项目](https://github.com/openatx/uiautomator2)
 
 ## 待实现
-
 - [ ] AI辅助
 - [ ] 听力
 - [ ] 更优雅的界面
