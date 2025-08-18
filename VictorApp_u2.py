@@ -34,9 +34,12 @@ class U2VictorApp:
         self.position = 1
         self.runTime = 0
         try:
-            self.relaxTime = int(input("请输入一个整数来设置每一题的间隔(回车默认为2s)>"))
-        except:
-            self.relaxTime = 2
+            user_input = input("请输入每一题的间隔秒数(可输入小数，回车默认为2s)>").strip()
+            self.relaxTime = float(user_input) if user_input != '' else 2.0
+            if self.relaxTime < 0:
+                self.relaxTime = 2.0
+        except Exception:
+            self.relaxTime = 2.0
 
     def tellTitle(self):
         """ 辨别题型 """
@@ -161,7 +164,7 @@ class U2VictorApp:
         click_start = time.time()
         for char in word:
             self.d(resourceId=f"{self.pkg_name}:id/key_{char.upper()}", clickable=True).click()
-        time.sleep(0.1)
+        # time.sleep(0.1)
         self.d(resourceId=self.ID_KEY_CONFIRM).click()
         print(f"    - [UI交互] 模拟键盘输入耗时: {time.time() - click_start:.4f} 秒")
         
@@ -404,6 +407,8 @@ if __name__ == "__main__":
             try:
                 total_questions = app.getTotal()
                 print(f"检测到共 {total_questions} 题。")
+                solved_question_count = 0
+                total_elapsed_seconds = 0.0
                 for i in range(total_questions):
                     question_start_time = time.time()
                     print(f"\n--- 正在解答第 {i+1} / {total_questions} 题 ---")
@@ -417,8 +422,15 @@ if __name__ == "__main__":
                         input()
                         continue
                     # 打印单题总耗时
-                    print(f"--- 第 {i+1} 题总耗时: {time.time() - question_start_time:.4f} 秒 ---")
+                    question_elapsed = time.time() - question_start_time
+                    print(f"--- 第 {i+1} 题总耗时: {question_elapsed:.4f} 秒 ---")
+                    solved_question_count += 1
+                    total_elapsed_seconds += question_elapsed
                 
+                if solved_question_count > 0:
+                    average_time_per_question = total_elapsed_seconds / solved_question_count
+                    print(f"本轮共完成 {solved_question_count} 题，平均每题耗时: {average_time_per_question:.4f} 秒")
+
                 app.runTime += 1
                 app.lastType = ''
                 print(f"\n程序已完整执行 {app.runTime} 轮。")
