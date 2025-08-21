@@ -1,4 +1,4 @@
-# --- START OF FILE VictorApp_u2.py (Optimized) ---
+# --- START OF FILE VictorApp.py ---
 
 import uiautomator2 as u2
 import re
@@ -7,20 +7,41 @@ import difflib
 from random import randint
 from SearchResult import SearchResult
 
+# --- 导入LLM相关模块 ---
+try:
+    import config
+    from LLMHelper import LLMHelper
+    LLM_AVAILABLE = True
+except ImportError:
+    LLM_AVAILABLE = False
+# --- 结束导入 ---
+
+
 # --- Simple console styling (ANSI). Set VERBOSE=True to show timings ---
 RESET = "\033[0m"
 COLORS = {
-    'blue': "\033[34m",
-    'green': "\033[32m",
-    'yellow': "\033[33m",
-    'red': "\033[31m",
-    'cyan': "\033[36m",
-    'magenta': "\033[35m",
-    'gray': "\033[90m",
+    # New color palette based on the provided image
+    # VISTA BLUE: RGB(124, 147, 206) - Used for 'blue' and 'cyan' (info)
+    'blue': "\033[38;2;124;147;206m",
+    'cyan': "\033[38;2;124;147;206m",
+
+    # MYRTLE GREEN: RGB(52, 122, 115) - Used for 'green' (ok)
+    'green': "\033[38;2;52;122;115m",
+    
+    # THISTLE: RGB(199, 182, 220) - Used for 'yellow' (warn) and 'magenta'
+    'yellow': "\033[38;2;199;182;220m",
+    'magenta': "\033[38;2;199;182;220m",
+
+    # TEA ROSE (RED): RGB(252, 204, 201) - Used for 'red' (error)
+    'red': "\033[38;2;252;204;201m",
+    
+    # BRUNSWICK GREEN: RGB(1, 73, 68) - Used for 'gray' (verbose)
+    'gray': "\033[38;2;1;73;68m",
+    
     'bold': "\033[1m",
 }
 
-VERBOSE = False
+VERBOSE = True
 
 def _c(text, color=None, bold=False):
     prefix = COLORS['bold'] if bold else ''
@@ -67,6 +88,18 @@ class U2VictorApp:
             7: self.__buildWord,
         }
         self.searcher = SearchResult()
+        # --- 初始化 LLM 助手 ---
+        self.llm_helper = None
+        if LLM_AVAILABLE and config.LLM_ENABLED:
+            self.llm_helper = LLMHelper()
+            if self.llm_helper.is_enabled():
+                log_info("LLM 辅助答题已启用。")
+            else:
+                log_warn("LLM 配置不完整或已禁用，辅助答题功能将不可用。")
+        else:
+            log_info("LLM 辅助答题已禁用。")
+        # --- 结束初始化 ---
+
         self.lastType = ''
         self.position = 1
         self.runTime = 0
@@ -161,15 +194,26 @@ class U2VictorApp:
         """ 解决拼写题型 """
         self.lastType = '拼写'
         
-        # 计时UI元素获取
         all_yinbiao = self.d.xpath(f'//*[@resource-id="{self.ID_YINBIAO}"]').all()
         all_chinese = self.d.xpath(f'//*[@resource-id="{self.ID_CHINESE}"]').all()
         noteText = all_yinbiao[0].text if self.position == 1 else all_yinbiao[-1].text
         mean = self.reSaveChinese(all_chinese[0].text if self.position == 1 else all_chinese[-1].text)
-        
 
         match = re.search(r"美\[(.+)\]", noteText)
         if not match:
+            # --- LLM 辅助 ---
+            if self.llm_helper and self.llm_helper.is_enabled():
+                word = self.llm_helper.answer_spelling(mean, noteText)
+                if word:
+                    log_ok(f"拼写 (LLM): {word}")
+                    for char in word:
+                        self.d(resourceId=f"{self.pkg_name}:id/key_{char.upper()}", clickable=True).click()
+                    self.d(resourceId=self.ID_KEY_CONFIRM).click()
+                    time.sleep(self.relaxTime)
+                    return
+                else:
+                    log_warn("拼写: LLM 未能提供有效答案。")
+            # --- 结束LLM ---
             log_warn("拼写: 无法提取美式音标，将试错")
             self.d(resourceId=f"{self.pkg_name}:id/key_A").click()
             self.d(resourceId=self.ID_KEY_CONFIRM).click()
@@ -177,8 +221,22 @@ class U2VictorApp:
             return
 
         note_USA = match.group(1)
-        
         words = self.searcher.noteSearchWord(note_USA)
+        if not words: # 如果题库没找到
+            # --- LLM 辅助 ---
+            if self.llm_helper and self.llm_helper.is_enabled():
+                word = self.llm_helper.answer_spelling(mean, noteText)
+                if word:
+                    log_ok(f"拼写 (LLM): {word}")
+                    for char in word:
+                        self.d(resourceId=f"{self.pkg_name}:id/key_{char.upper()}", clickable=True).click()
+                    self.d(resourceId=self.ID_KEY_CONFIRM).click()
+                    time.sleep(self.relaxTime)
+                    return
+                else:
+                    log_warn("拼写: LLM 未能提供有效答案。")
+            # --- 结束LLM ---
+        
         word = words[0]
         if len(words) > 1:
             rates = []
@@ -187,11 +245,9 @@ class U2VictorApp:
                 answerMean = self.reSaveChinese(''.join(answerList))
                 rates.append(self.compareWordsMean(answerMean, mean))
             word = words[rates.index(max(rates))]
-        
 
         for char in word:
             self.d(resourceId=f"{self.pkg_name}:id/key_{char.upper()}", clickable=True).click()
-        # time.sleep(0.1)
         self.d(resourceId=self.ID_KEY_CONFIRM).click()
         log_ok(f"拼写: {word}")
         time.sleep(self.relaxTime)
@@ -200,16 +256,32 @@ class U2VictorApp:
         """ 解决构词法拼词 """
         self.lastType = '构词法拼词'
 
-        # 计时UI元素获取
         part_words = self.d.xpath(f'//*[@resource-id="{self.ID_PART_WORD}"]').all()
         part_word = part_words[0].text if self.position == 1 else part_words[-1].text
         clickable_text_views = self.d.xpath('//android.widget.TextView[@clickable="true"]').all()
         parts = [elem.text for elem in clickable_text_views]
         
-        # 数据查找过程已在 SearchResult 中计时，这里只调用
         resultList = self.searcher.getPutAnswer(part_word, parts, self.position)
         
         if not resultList:
+            # --- LLM 辅助 ---
+            if self.llm_helper and self.llm_helper.is_enabled():
+                pieces_to_click = self.llm_helper.answer_build_word(part_word, parts)
+                if pieces_to_click:
+                    log_ok(f"构词法 (LLM): {part_word} + {''.join(pieces_to_click)}")
+                    clicked_elements = []
+                    for piece in pieces_to_click:
+                        for elem in clickable_text_views:
+                            if elem.text == piece:
+                                clicked_elements.append(elem)
+                                break
+                    for elem in clicked_elements:
+                        elem.click()
+                    time.sleep(self.relaxTime)
+                    return
+                else:
+                    log_warn("构词法: LLM 未能提供有效答案。")
+            # --- 结束LLM ---
             log_warn("构词法: 无题库命中，将试错")
             if clickable_text_views:
                 clickable_text_views[randint(0, len(clickable_text_views)-1)].click()
@@ -254,7 +326,6 @@ class U2VictorApp:
         """ 解决英译汉 """
         self.lastType = '英译汉'
         
-        # 计时UI元素获取
         english_words = self.d.xpath(f'//*[@resource-id="{self.ID_ENGLISH}"]').all()
         word = english_words[0].text if self.position == 1 else english_words[-1].text
         choice_A, choice_B, choice_C = self.__get_choice_elements()
@@ -262,7 +333,6 @@ class U2VictorApp:
             log_err("英译汉: 选项获取失败，跳过")
             return
 
-        # 计时题库查找
         resultList = self.searcher.getEnglishtoChinese(self.filter_chinese_and_english(word))
         
         if resultList:
@@ -281,7 +351,6 @@ class U2VictorApp:
                     time.sleep(self.relaxTime)
                     return
 
-        # 计时机器识别（如果题库未命中）
         answer_means = self.searcher.getMeanFromWord(word)
         buttons = [choice_A, choice_B, choice_C]
         choices_text = [c.text.replace(f'{chr(65+i)}. ', '') for i, c in enumerate(buttons)]
@@ -299,20 +368,31 @@ class U2VictorApp:
             buttons[best_choice_index].click()
             log_info(f"英译汉: {word} -> 机器识别 {choices_text[best_choice_index]}")
             time.sleep(self.relaxTime)
-        else:
-            buttons[randint(0, 2)].click()
-            log_warn("英译汉: 无答案，将试错")
-            time.sleep(3)
-            
-    # 其他函数 __question, __listen 也可仿照上述方法添加计时，此处省略以保持简洁
+            return
 
-    # ... (此处省略 __question 和 __listen 的修改，您可以仿照上面的例子自行添加)
-    # ...
+        # --- LLM 辅助 ---
+        if self.llm_helper and self.llm_helper.is_enabled():
+            question_text = f"单词 '{word}' 的中文意思是什么？"
+            choices_dict = {'A': choice_A.text, 'B': choice_B.text, 'C': choice_C.text}
+            answer_char = self.llm_helper.answer_choice_question(question_text, choices_dict)
+            if answer_char == 'A':
+                choice_A.click(); log_ok(f"英译汉 (LLM): {word} -> {choice_A.text}"); time.sleep(self.relaxTime); return
+            elif answer_char == 'B':
+                choice_B.click(); log_ok(f"英译汉 (LLM): {word} -> {choice_B.text}"); time.sleep(self.relaxTime); return
+            elif answer_char == 'C':
+                choice_C.click(); log_ok(f"英译汉 (LLM): {word} -> {choice_C.text}"); time.sleep(self.relaxTime); return
+            else:
+                log_warn("英译汉: LLM 未能提供有效答案。")
+        # --- 结束LLM ---
+        
+        buttons[randint(0, 2)].click()
+        log_warn("英译汉: 无答案，将试错")
+        time.sleep(3)
+            
     def __question(self):
         """ 解决大杂烩 """
         self.lastType = '大杂烩'
         
-        # 计时UI元素获取
         questions = self.d.xpath(f'//*[@resource-id="{self.ID_QUESTION}"]').all()
         text = questions[0].text if self.position == 1 else questions[-1].text
         choice_A, choice_B, choice_C = self.__get_choice_elements()
@@ -320,7 +400,6 @@ class U2VictorApp:
             log_err("大杂烩: 选项获取失败，跳过")
             return
 
-        # 计时数据处理和查找
         clean_text = self.filter_chinese_and_english(text)
         
         if self.is_chinese(text):
@@ -341,7 +420,6 @@ class U2VictorApp:
                     choice_C.click(); log_ok(f"大杂烩: 命中题库 -> {clean_result}"); time.sleep(self.relaxTime); return
         
         if self.is_chinese(text):
-            # 计时机器识别
             buttons = [choice_A, choice_B, choice_C]
             choices_text = [c.text.replace(f'{chr(65+i)}. ', '') for i, c in enumerate(buttons)]
             rates = [0, 0, 0]
@@ -361,7 +439,21 @@ class U2VictorApp:
                 log_info(f"大杂烩: 机器识别 -> {choices_text[rates.index(max(rates))]}")
                 time.sleep(self.relaxTime)
                 return
-
+        
+        # --- LLM 辅助 ---
+        if self.llm_helper and self.llm_helper.is_enabled():
+            choices_dict = {'A': choice_A.text, 'B': choice_B.text, 'C': choice_C.text}
+            answer_char = self.llm_helper.answer_choice_question(text, choices_dict)
+            if answer_char == 'A':
+                choice_A.click(); log_ok(f"大杂烩 (LLM): {choice_A.text}"); time.sleep(self.relaxTime); return
+            elif answer_char == 'B':
+                choice_B.click(); log_ok(f"大杂烩 (LLM): {choice_B.text}"); time.sleep(self.relaxTime); return
+            elif answer_char == 'C':
+                choice_C.click(); log_ok(f"大杂烩 (LLM): {choice_C.text}"); time.sleep(self.relaxTime); return
+            else:
+                log_warn("大杂烩: LLM 未能提供有效答案。")
+        # --- 结束LLM ---
+        
         log_warn("大杂烩: 无答案，将试错")
         choices = [choice_A, choice_B, choice_C]
         choices[randint(0, 2)].click()
@@ -443,3 +535,4 @@ if __name__ == "__main__":
                 input("按回车键重试...")
         else:
             break
+# --- END OF FILE VictorApp.py ---

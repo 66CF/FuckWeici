@@ -8,34 +8,34 @@ class SearchResult():
     def __init__(self):
         # 记录整个初始化的开始时间
         init_start_time = time.time()
-        print("[性能分析] SearchResult 初始化开始...")
+        print("--- SearchResult 初始化 ---")
 
         # 计时加载 fb_word_detail.json
         load_start_time = time.time()
         with open('Data/fb_word_detail.json', 'r', encoding='utf-8') as self.f:
             self.DATA = json.loads(self.f.read())
-        print(f"    - [文件IO] 加载 'fb_word_detail.json' 耗时: {time.time() - load_start_time:.4f} 秒")
+        print(f"  - [IO] 'fb_word_detail.json' 加载完毕 ({time.time() - load_start_time:.4f}s)")
 
         # 计时生成或加载 WordCorresponding.json
         word_corr_start_time = time.time()
         if not os.path.exists('Data/WordCorresponding.json'):
-            print("    - [数据处理] 'WordCorresponding.json' 不存在，开始生成...")
+            print("  - [!] 'WordCorresponding.json' 不存在, 开始生成...")
             with open("Data/WordCorresponding.json",'w',encoding='utf-8') as self.f:
                 self.WordCorresponding = self.generateWordCorresponding()
                 self.f.write(json.dumps(self.WordCorresponding,ensure_ascii=False,indent=4))
-            print(f"    - [数据处理] 生成并写入 'WordCorresponding.json' 耗时: {time.time() - word_corr_start_time:.4f} 秒")
+            print(f"  - [CPU] 'WordCorresponding.json' 生成完毕 ({time.time() - word_corr_start_time:.4f}s)")
         else:
             with open("Data/WordCorresponding.json", 'r', encoding='utf-8') as self.f:
                 self.WordCorresponding = json.loads(self.f.read())
-            print(f"    - [文件IO] 加载 'WordCorresponding.json' 耗时: {time.time() - word_corr_start_time:.4f} 秒")
+            print(f"  - [IO] 'WordCorresponding.json' 加载完毕 ({time.time() - word_corr_start_time:.4f}s)")
 
         # 计时加载 newAnswer.json
         load_start_time = time.time()
         with open('Data/newAnswer.json', 'r', encoding='utf-8') as self.f:
             self.newDATA = json.loads(self.f.read())
-        print(f"    - [文件IO] 加载 'newAnswer.json' 耗时: {time.time() - load_start_time:.4f} 秒")
+        print(f"  - [IO] 'newAnswer.json' 加载完毕 ({time.time() - load_start_time:.4f}s)")
         
-        print(f"[性能分析] SearchResult 初始化完成, 总耗时: {time.time() - init_start_time:.4f} 秒")
+        print(f"--- 初始化完成 (总耗时: {time.time() - init_start_time:.4f}s) ---")
 
 
     def generateWordCorresponding(self):
@@ -171,17 +171,17 @@ class SearchResult():
                 # 排列组合是性能消耗大户，单独计时
                 perm_start_time = time.time()
                 varyList = self.get_all_permutations(searchList)
-                print(f"        - [CPU密集] getPutAnswer-排列组合计算耗时: {time.time() - perm_start_time:.4f} 秒 (生成了 {len(varyList)} 种可能)")
+                print(f"        -> [CPU] 排列组合: {len(varyList)} 种可能 (耗时 {time.time() - perm_start_time:.4f}s)")
                 
                 for k in varyList:
                     if list(k) == self.newDATA["构词法"][1][i]:
-                        print(f"    - [数据处理] 'getPutAnswer' 查找成功, 总耗时: {time.time() - func_start_time:.4f} 秒")
+                        print(f"    - [getPutAnswer] 查找成功 (总耗时: {time.time() - func_start_time:.4f}s)")
                         return self.newDATA["构词法"][2][i]
             except Exception as e:
-                print(e)
+                print(f"    - [getPutAnswer] 发生错误: {e}")
                 continue
         else:
-            print(f"    - [数据处理] 'getPutAnswer' 未找到答案, 总耗时: {time.time() - func_start_time:.4f} 秒")
+            print(f"    - [getPutAnswer] 未找到答案 (总耗时: {time.time() - func_start_time:.4f}s)")
             return 0
 
     def getChinesetoEnglish(self,question):
