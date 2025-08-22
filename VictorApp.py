@@ -466,7 +466,27 @@ class U2VictorApp:
             log_err("听音识词: 选项获取失败，跳过")
             return
         
-        log_warn("听音识词暂不支持，将随机选择")
+        choices_text_list = [
+            choice_A.text.replace('A. ', '').strip(),
+            choice_B.text.replace('B. ', '').strip(),
+            choice_C.text.replace('C. ', '').strip()
+        ]
+        
+        raw_answer_from_db = self.searcher.getListenAnswer(choices_text_list)
+        
+        if raw_answer_from_db:
+            # 终极修复：移除空白字符，然后移除任何包裹字符串的引号
+            answer_from_db = raw_answer_from_db.strip().strip("'\"")
+
+            # 现在进行最干净、最可靠的比较
+            if choice_A.text.strip() == answer_from_db:
+                choice_A.click(); log_ok(f"听音识词: 命中题库 -> {answer_from_db}"); time.sleep(self.relaxTime); return
+            elif choice_B.text.strip() == answer_from_db:
+                choice_B.click(); log_ok(f"听音识词: 命中题库 -> {answer_from_db}"); time.sleep(self.relaxTime); return
+            elif choice_C.text.strip() == answer_from_db:
+                choice_C.click(); log_ok(f"听音识词: 命中题库 -> {answer_from_db}"); time.sleep(self.relaxTime); return
+
+        log_warn("听音识词: 题库未命中，将随机选择")
         choices = [choice_A, choice_B, choice_C]
         choices[randint(0, 2)].click()
         time.sleep(3)
