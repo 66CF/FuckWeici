@@ -153,36 +153,41 @@ class SearchResult():
         return indexes
 
     def getPutAnswer(self,question,parts,position):
-        # 重点监控此函数性能
         func_start_time = time.time()
+        found_answers = []
 
-        indexs = self.find_indexes(self.newDATA["构词法"][0],question)
+        indexs = self.find_indexes(self.newDATA["构词法"][0], question)
         for i in indexs:
             try:
-                length = len(self.newDATA["构词法"][1][i])
-                searchList = []
-                if position == 1:
-                    for j in parts[:length]:
-                        searchList.append(j)
-                else:
-                    for j in parts[-length:]:
-                        searchList.append(j)
+                # newAnswer.json 中构词法[1]是需要点击的词缀部分，如 ['ise']
+                db_parts_needed = self.newDATA["构词法"][1][i]
                 
-                # 排列组合是性能消耗大户，单独计时
-                perm_start_time = time.time()
-                varyList = self.get_all_permutations(searchList)
-                print(f"        -> [CPU] 排列组合: {len(varyList)} 种可能 (耗时 {time.time() - perm_start_time:.4f}s)")
-                
-                for k in varyList:
-                    if list(k) == self.newDATA["构词法"][1][i]:
-                        print(f"    - [getPutAnswer] 查找成功 (总耗时: {time.time() - func_start_time:.4f}s)")
-                        return self.newDATA["构词法"][2][i]
+                # newAnswer.json 中构词法[2]是组成完整单词的所有部分，如 ['organ', 'ise']
+                full_word_parts = self.newDATA["构词法"][2][i]
+
+                # 检查屏幕上的选项是否包含我们需要的词缀
+                all_needed_parts_on_screen = all(p in parts for p in db_parts_needed)
+
+                if all_needed_parts_on_screen:
+                    # **核心修改**：创建一个包含清晰信息的字典
+                    candidate = {
+                        "word": "".join(full_word_parts),    # 拼接成完整单词字符串，如 "organise"
+                        "parts_to_click": db_parts_needed    # 需要点击的词缀，如 ['ise']
+                    }
+                    found_answers.append(candidate)
+                    # 为了日志清晰，打印拼接后的单词
+                    print(f"    - [getPutAnswer] 找到候选答案: {candidate['word']}")
+
             except Exception as e:
                 print(f"    - [getPutAnswer] 发生错误: {e}")
                 continue
+        
+        if found_answers:
+            print(f"    - [getPutAnswer] 查找完毕，共找到 {len(found_answers)} 个候选 (总耗时: {time.time() - func_start_time:.4f}s)")
+            return found_answers
         else:
             print(f"    - [getPutAnswer] 未找到答案 (总耗时: {time.time() - func_start_time:.4f}s)")
-            return 0
+            return []
 
     def getChinesetoEnglish(self,question):
         try:

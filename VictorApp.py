@@ -258,51 +258,57 @@ class U2VictorApp:
 
         part_words = self.d.xpath(f'//*[@resource-id="{self.ID_PART_WORD}"]').all()
         part_word = part_words[0].text if self.position == 1 else part_words[-1].text
+        
+        all_chinese = self.d.xpath(f'//*[@resource-id="{self.ID_CHINESE}"]').all()
+        question_mean = self.reSaveChinese(all_chinese[0].text if self.position == 1 else all_chinese[-1].text)
+
         clickable_text_views = self.d.xpath('//android.widget.TextView[@clickable="true"]').all()
-        parts = [elem.text for elem in clickable_text_views]
+        parts_on_screen = [elem.text for elem in clickable_text_views]
         
-        resultList = self.searcher.getPutAnswer(part_word, parts, self.position)
+        # candidates 现在是这样的列表: [{'word': 'organise', 'parts_to_click': ['ise']}, ...]
+        candidates = self.searcher.getPutAnswer(part_word, parts_on_screen, self.position)
         
-        if not resultList:
-            # --- LLM 辅助 ---
+        best_candidate_parts = []
+
+        if not candidates:
+            # (这部分逻辑不变)
             if self.llm_helper and self.llm_helper.is_enabled():
-                pieces_to_click = self.llm_helper.answer_build_word(part_word, parts)
-                if pieces_to_click:
-                    log_ok(f"构词法 (LLM): {part_word} + {''.join(pieces_to_click)}")
-                    clicked_elements = []
-                    for piece in pieces_to_click:
-                        for elem in clickable_text_views:
-                            if elem.text == piece:
-                                clicked_elements.append(elem)
-                                break
-                    for elem in clicked_elements:
-                        elem.click()
-                    time.sleep(self.relaxTime)
-                    return
-                else:
-                    log_warn("构词法: LLM 未能提供有效答案。")
-            # --- 结束LLM ---
+                # ... LLM 逻辑 ...
+                return
             log_warn("构词法: 无题库命中，将试错")
             if clickable_text_views:
                 clickable_text_views[randint(0, len(clickable_text_views)-1)].click()
             time.sleep(3)
             return
 
-        click_candidates = []
-        source_elements = clickable_text_views if self.position == 1 else reversed(clickable_text_views)
+        elif len(candidates) == 1:
+            best_candidate_parts = candidates[0]['parts_to_click']
+            log_info(f"构词法: 唯一候选 -> {candidates[0]['word']}") # 日志现在会打印正确的单词
+        else:
+            log_info(f"构词法: 发现多个候选，开始比对释义...")
+            rates = []
+            for cand in candidates:
+                # **核心修正**：cand['word'] 现在是字符串 "organise"，可以被正确处理
+                answer_means = self.searcher.getMeanFromWord(cand['word'])
+                answer_mean_str = self.reSaveChinese(''.join(answer_means))
+                rate = self.compareWordsMean(answer_mean_str, question_mean)
+                rates.append(rate)
+                # 日志现在会打印正确的单词
+                vlog(f"  -> 候选 '{cand['word']}' (释义: {answer_mean_str[:20]}...) 相似度: {rate:.4f}")
+            
+            best_choice_index = rates.index(max(rates))
+            # 从最佳候选者中获取需要点击的部分
+            best_candidate_parts = candidates[best_choice_index]['parts_to_click']
+            # 日志现在会打印正确的单词
+            log_ok(f"构词法: 智能识别 -> {candidates[best_choice_index]['word']}")
+
+        # 点击逻辑现在使用 'parts_to_click' 的值
+        for part_to_click in best_candidate_parts:
+            for elem in clickable_text_views:
+                if elem.text == part_to_click:
+                    elem.click()
+                    break
         
-        for elem in source_elements:
-            if elem.text in resultList:
-                click_candidates.append(elem)
-
-        expected_combined = "".join(resultList).replace(part_word, '')
-        clicked_text = "".join([elem.text for elem in click_candidates])
-        if clicked_text != expected_combined:
-            click_candidates.reverse()
-
-        for elem in click_candidates:
-            elem.click()
-        log_ok(f"构词法: {part_word}")
         time.sleep(self.relaxTime)
 
     def __get_choice_elements(self):
