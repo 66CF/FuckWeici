@@ -23,6 +23,6 @@ LLM_BASE_URL = "https://www.sophnet.com/api/open-apis/v1"
 # - Groq: "llama3-8b-8192", "gemma-7b-it"
 # - OpenAI: "gpt-3.5-turbo", "gpt-4o"
 # - DeepSeek: "deepseek-chat"
-LLM_MODEL = "Qwen3-14B"
+LLM_MODEL = "Qwen3-32B"
 
 # --- END OF FILE config.py ---

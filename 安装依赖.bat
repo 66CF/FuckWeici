@@ -1,37 +1,20 @@
 @echo off
-title °²×° uiautomator2 ÒÀÀµ
-echo ============================================
-echo ¼ì²é Python ÊÇ·ñ°²×°...
-echo ============================================
+chcp 65001 > nul
+title VictorApp Dependency Installer
 
-:: ¼ì²é python ÊÇ·ñ¿ÉÓÃ
-python --version >nul 2>&1
+echo [INFO] æ­£åœ¨æ£€æŸ¥ Python ç¯å¢ƒ...
+python --version > nul 2>&1
 if %errorlevel% neq 0 (
-    echo [´íÎó] Î´¼ì²âµ½ Python£¬ÇëÏÈ°²×° Python ²¢ÅäÖÃµ½»·¾³±äÁ¿¡£
+    echo [ERROR] æœªåœ¨ç³»ç»Ÿä¸­æ‰¾åˆ° Pythonã€‚è¯·å…ˆå®‰è£… Python 3 å¹¶å°†å…¶æ·»åŠ åˆ°ç³»ç»Ÿ PATHã€‚
     pause
-    exit /b 1
+    exit
 )
 
-echo ÒÑ¼ì²âµ½ Python¡£
-python --version
+echo [INFO] æ‰¾åˆ° Python, å¼€å§‹ä» requirements.txt å®‰è£…ä¾èµ–...
+echo [INFO] ä½¿ç”¨æ¸…åå¤§å­¦é•œåƒæºåŠ é€Ÿä¸‹è½½...
+
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 echo.
-echo ============================================
-echo ¿ªÊ¼°²×° uiautomator2 ...
-echo ============================================
-
-:: Ê¹ÓÃ pip °²×°
-python -m pip install --upgrade pip
-python -m pip install -U uiautomator2
-
-if %errorlevel% neq 0 (
-    echo [´íÎó] uiautomator2 °²×°Ê§°Ü£¡
-    pause
-    exit /b 1
-)
-
-echo.
-echo ============================================
-echo uiautomator2 °²×°Íê³É£¡
-echo ============================================
+echo [SUCCESS] ä¾èµ–å®‰è£…å®Œæˆ!
 pause
