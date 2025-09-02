@@ -159,20 +159,25 @@ class SearchResult():
         indexs = self.find_indexes(self.newDATA["构词法"][0], question)
         for i in indexs:
             try:
-                # newAnswer.json 中构词法[1]是需要点击的词缀部分，如 ['ise']
-                db_parts_needed = self.newDATA["构词法"][1][i]
-                
-                # newAnswer.json 中构词法[2]是组成完整单词的所有部分，如 ['organ', 'ise']
+                # newAnswer.json 中构词法[2]是组成完整单词的所有部分，如 ['strength', 'en']
                 full_word_parts = self.newDATA["构词法"][2][i]
 
-                # 检查屏幕上的选项是否包含我们需要的词缀
-                all_needed_parts_on_screen = all(p in parts for p in db_parts_needed)
+                # --- START OF FIX ---
+                # 不再盲目相信 newAnswer.json 中预设的需点击部分 (构词法[1])
+                # 而是根据"完整组成部分"和"问题本身"动态推导出需要点击的词缀。
+                # 这样可以修正数据库中潜在的数据不一致问题。
+                # 例如：完整组成是 ['strength', 'en']，问题是 'strength'，那么需点击的就是 'en'。
+                derived_parts_to_click = [p for p in full_word_parts if p != question]
+                # --- END OF FIX ---
+
+                # 检查屏幕上的选项是否包含我们推导出的、真正需要的词缀
+                all_needed_parts_on_screen = all(p in parts for p in derived_parts_to_click)
 
                 if all_needed_parts_on_screen:
-                    # **核心修改**：创建一个包含清晰信息的字典
                     candidate = {
-                        "word": "".join(full_word_parts),    # 拼接成完整单词字符串，如 "organise"
-                        "parts_to_click": db_parts_needed    # 需要点击的词缀，如 ['ise']
+                        "word": "".join(full_word_parts),
+                        # **核心修改**: 使用我们动态推导出的、正确的词缀列表
+                        "parts_to_click": derived_parts_to_click
                     }
                     found_answers.append(candidate)
                     # 为了日志清晰，打印拼接后的单词
