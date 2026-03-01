@@ -9,7 +9,7 @@ from SearchResult import SearchResult
 
 # --- 导入LLM相关模块 ---
 try:
-    import config
+    from config_loader import load_llm_settings
     from LLMHelper import LLMHelper
     LLM_AVAILABLE = True
 except ImportError:
@@ -90,14 +90,21 @@ class U2VictorApp:
         self.searcher = SearchResult()
         # --- 初始化 LLM 助手 ---
         self.llm_helper = None
-        if LLM_AVAILABLE and config.LLM_ENABLED:
-            self.llm_helper = LLMHelper()
+        if LLM_AVAILABLE:
+            llm_settings = load_llm_settings()
+            if llm_settings.get("created_config"):
+                log_warn(f"未找到 config.py，已自动生成: {llm_settings.get('config_path')}")
+                log_warn("请填写 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL 后重启程序。")
+            self.llm_helper = LLMHelper(llm_settings)
             if self.llm_helper.is_enabled():
                 log_info("LLM 辅助答题已启用。")
+            elif llm_settings.get("enabled"):
+                log_warn("LLM 已开启但配置不完整，辅助答题功能将不可用。")
+                log_warn(f"配置文件位置: {llm_settings.get('config_path')}")
             else:
-                log_warn("LLM 配置不完整或已禁用，辅助答题功能将不可用。")
+                log_info("LLM 辅助答题已禁用。")
         else:
-            log_info("LLM 辅助答题已禁用。")
+            log_warn("LLM 组件加载失败，辅助答题功能不可用。")
         # --- 结束初始化 ---
 
         self.lastType = ''

@@ -29,6 +29,11 @@ python VictorApp.py
 
 不使用 LLM 时，将 `LLM_ENABLED` 设为 `False` 即可。
 
+### Release 版 EXE 如何启用 LLM
+- 首次运行 `FuckWeici.exe` 时，如果目录里没有 `config.py`，程序会自动生成。
+- 打开生成的 `config.py`，填写 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 后重启 exe。
+- 也可直接用环境变量覆盖：`LLM_ENABLED`、`LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`。
+
 ## 常见问题
 - 设备连不上：先执行 `adb devices` 检查连接，再尝试 `adb kill-server` 后重连。
 - 启动报 uiautomator2 相关错误：执行 `python -m uiautomator2 init` 后重试。
