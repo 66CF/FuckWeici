@@ -3,7 +3,6 @@
 import requests
 import json
 import re
-import config  # 导入用户的配置
 
 # 从VictorApp.py复制日志函数以便在此处使用
 RESET = "\033[0m"
@@ -22,13 +21,13 @@ def log_warn(msg): print(f"{_c('[!]', 'yellow', True)} {msg}")
 
 
 class LLMHelper:
-    def __init__(self):
+    def __init__(self, settings):
         self.enabled = False
-        if config.LLM_ENABLED and config.LLM_API_KEY not in ["", "YOUR_API_KEY_HERE"]:
-            self.api_key = config.LLM_API_KEY
-            self.base_url = config.LLM_BASE_URL
-            self.model = config.LLM_MODEL
-            self.enabled = True
+        self.api_key = str(settings.get("api_key", "")).strip()
+        self.base_url = str(settings.get("base_url", "")).strip().rstrip("/")
+        self.model = str(settings.get("model", "")).strip()
+        enabled = bool(settings.get("enabled", False))
+        self.enabled = enabled and bool(self.api_key) and bool(self.base_url) and bool(self.model)
         
     def is_enabled(self):
         return self.enabled
