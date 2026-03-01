@@ -3,7 +3,10 @@ name: Build and Release Windows EXE
 on:
   push:
     tags:
-      - "v*"
+      - "*"
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 permissions:
@@ -37,6 +40,7 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ github.ref_name }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) { $tag = "${{ github.event.release.tag_name }}" }
           if ([string]::IsNullOrWhiteSpace($tag)) { $tag = "manual" }
           $zipName = "FuckWeici-windows-x64-$tag.zip"
           Compress-Archive -Path dist/FuckWeici/* -DestinationPath $zipName -Force
@@ -49,8 +53,9 @@ jobs:
           path: ${{ env.ZIP_NAME }}
 
       - name: Create Release and Upload Asset
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' || github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
           files: ${{ env.ZIP_NAME }}
           generate_release_notes: true
