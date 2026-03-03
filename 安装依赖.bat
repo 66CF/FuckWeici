@@ -2,6 +2,11 @@
 setlocal
 cd /d "%~dp0"
 set "PATH=%PATH%;%LOCALAPPDATA%\Microsoft\WinGet\Links"
+set "UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple"
+set "PIP_INDEX_URL=%UV_INDEX_URL%"
+set "PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn"
+
+echo [INFO] Using CN mirror: %UV_INDEX_URL%
 
 where uv >nul 2>nul
 if errorlevel 1 (
@@ -41,9 +46,14 @@ if errorlevel 1 (
     )
 )
 
+echo [INFO] Running uv sync with CN mirror...
 uv sync
 if errorlevel 1 (
-    echo [ERROR] uv sync failed.
+    echo [ERROR] uv sync failed. Mirror used: %UV_INDEX_URL%
+    echo [HINT] If this keeps failing, run:
+    echo        set UV_INDEX_URL=%UV_INDEX_URL%
+    echo        uv cache clean
+    echo        uv sync -v
     pause
     exit /b 1
 )

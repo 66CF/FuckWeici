@@ -1,6 +1,8 @@
 config.py
 __pycache__/
 *.pyc
+.tmp/
+db/*-journal
 build/
 dist/
 *.spec

@@ -43,6 +43,7 @@ class SearchResult:
         self._english_to_chinese_map = self._build_question_answer_map("英译汉")
         self._build_word_indexes = self._build_question_indexes("构词法")
         self._listen_answer_map = self._build_listen_answer_map()
+        self._spelling_answer_map = self._build_spelling_answer_map()
 
     def _normalize_question_text(self, text):
         return "".join(re.findall(r"[a-zA-Z\u4e00-\u9fa5]+", str(text or "")))
@@ -67,6 +68,7 @@ class SearchResult:
 
     def _build_new_data_from_db(self, conn):
         new_data = {
+            "拼写": [[], []],
             "听音识词": [[], []],
             "语境题": [[], []],
             "构词法": [[], [], []],
@@ -84,7 +86,13 @@ class SearchResult:
         for questions, subject, answer, answer_a, answer_b, answer_c, spell_word in rows:
             q_type = int(questions or 0)
             normalized_answer = self._format_answer(answer)
-            if q_type == 6:
+            if q_type == 1:
+                subject_word = str(subject or "").strip()
+                answer_word = self._normalize_choice(answer)
+                if subject_word or answer_word:
+                    new_data["拼写"][0].append(subject_word)
+                    new_data["拼写"][1].append(answer_word or subject_word)
+            elif q_type == 6:
                 options = [
                     self._strip_choice_prefix(answer_a),
                     self._strip_choice_prefix(answer_b),
@@ -201,6 +209,68 @@ class SearchResult:
                 answer_map[key] = answer
         return answer_map
 
+    def _normalize_spelling_word(self, word):
+        return re.sub(r"\s+", "", str(word or "").strip()).lower()
+
+    def _expand_optional_spelling(self, word):
+        raw = str(word or "").strip()
+        if not raw:
+            return []
+
+        pattern = re.compile(r"\(([^()]+)\)")
+        variants = []
+        seen = set()
+
+        def push(value):
+            if value and value not in seen:
+                seen.add(value)
+                variants.append(value)
+                return True
+            return False
+
+        queue = [raw]
+        push(raw)
+        while queue:
+            current = queue.pop(0)
+            match = pattern.search(current)
+            if not match:
+                continue
+            without_optional = current[:match.start()] + current[match.end():]
+            with_optional = current[:match.start()] + match.group(1) + current[match.end():]
+            if push(without_optional):
+                queue.append(without_optional)
+            if push(with_optional):
+                queue.append(with_optional)
+        return variants
+
+    def _build_spelling_answer_map(self):
+        section = self.newDATA.get("拼写", [])
+        if not isinstance(section, list) or len(section) < 2:
+            return {}
+
+        subjects = section[0] if isinstance(section[0], list) else []
+        answers = section[1] if isinstance(section[1], list) else []
+        answer_map = {}
+
+        for raw in answers:
+            normalized = self._normalize_spelling_word(raw)
+            cleaned = re.sub(r"[^A-Za-z]", "", str(raw or "").strip())
+            if normalized and normalized not in answer_map:
+                answer_map[normalized] = str(raw).strip()
+            cleaned_norm = self._normalize_spelling_word(cleaned)
+            if cleaned_norm and cleaned_norm not in answer_map:
+                answer_map[cleaned_norm] = cleaned
+
+        for raw in subjects:
+            normalized = self._normalize_spelling_word(raw)
+            cleaned = re.sub(r"[^A-Za-z]", "", str(raw or "").strip())
+            if normalized and normalized not in answer_map:
+                answer_map[normalized] = str(raw).strip()
+            cleaned_norm = self._normalize_spelling_word(cleaned)
+            if cleaned_norm and cleaned_norm not in answer_map:
+                answer_map[cleaned_norm] = cleaned
+        return answer_map
+
     def generateWordCorresponding(self, data):
         """创建单词 音标 词性 意思列表"""
         words = []
@@ -277,6 +347,27 @@ class SearchResult:
     def getListenAnswer(self, choices):
         key = self._normalize_choice_key(choices)
         return self._listen_answer_map.get(key)
+
+    def resolveSpellingWord(self, word):
+        variants = self._expand_optional_spelling(word)
+        if not variants:
+            return ""
+
+        for variant in variants:
+            norm = self._normalize_spelling_word(variant)
+            if norm in self._spelling_answer_map:
+                return self._spelling_answer_map[norm]
+
+            cleaned = re.sub(r"[^A-Za-z]", "", variant)
+            cleaned_norm = self._normalize_spelling_word(cleaned)
+            if cleaned_norm in self._spelling_answer_map:
+                return self._spelling_answer_map[cleaned_norm]
+
+        for variant in variants:
+            cleaned = re.sub(r"[^A-Za-z]", "", variant)
+            if cleaned:
+                return cleaned
+        return str(word or "").strip()
 
     def find_indexes(self, input_list, element):
         return [i for i, value in enumerate(input_list) if value == element]

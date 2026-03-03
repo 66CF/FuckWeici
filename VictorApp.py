@@ -338,6 +338,9 @@ class U2VictorApp:
                 rates.append(self.compareWordsMean(answerMean, mean))
             word = words[rates.index(max(rates))]
 
+        # 与 fb_word_test 的拼写标准答案对齐（如 afterward(s) -> afterwards）
+        word = self.searcher.resolveSpellingWord(word)
+
         for char in word:
             self.d(resourceId=f"{self.pkg_name}:id/key_{char.upper()}", clickable=True).click()
         self.d(resourceId=self.ID_KEY_CONFIRM).click()
