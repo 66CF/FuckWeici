@@ -1,80 +1,42 @@
-# FuckWeici
-基于 [uiautomator2](https://github.com/openatx/uiautomator2) 的维词安卓自动答题脚本。
+# 🚀 FuckWeici
 
-## 环境要求
-- Windows 10/11
-- `winget`（用于自动安装 `uv` 和 `adb`）
-- Android 设备已开启 USB 调试
+**维词全自动做题机 —— 少废话，先起飞。**  
+这是一个能让你解放双手、躺平刷词的终极自动化神器。不需要懂代码，不需要动脑子，点两下鼠标，你的单词本就会自己完成KPI。
 
-## 快速开始（uv）
+---
 
-### 方式 A：双击运行（推荐，Windows）
-1. 双击运行 `安装依赖.bat`（会自动安装缺失的 `uv` / `adb`）。
-3. 手机开启 USB 调试并连接电脑，确认 `adb devices` 能看到设备。
-4. 首次使用执行一次初始化：`uv run python -m uiautomator2 init`
-5. 打开手机维词 App 并停在答题页面。
-6. 双击运行 `启动.bat`。
+## 🐒 猴子也能懂的使用指南（只需两步）
 
-### 方式 B：命令行（通用）
-```bash
-uv python install 3.12
-uv sync
-uv run python -m uiautomator2 init
-uv run python VictorApp.py
-```
+如果你这都学不会，那建议把手机捐给有需要的人。
 
-## uv 安装示例（Windows）
-```powershell
-winget install --id=astral-sh.uv -e
-```
+### 第 1 步：装环境
+找到那个叫 `安装依赖.bat` 的东西，**双击它**。  
+*（然后去泡杯咖啡或刷个短视频，等黑框框自己跑完，期间啥都别按就行！）*
 
-## 功能说明
-- 自动识别并处理多种题型：拼写、英译汉、构词法、大杂烩、听音识词。
-- 优先使用本地题库答题，未命中时可切换到 LLM 辅助。
-- 支持自定义每题间隔时间。
+### 第 2 步：起飞
+1. 把你的安卓手机/模拟器连上电脑，记得在手机端开启 **“USB调试”**。
+2. 双击 `启动.bat`。
+3. 丢下手机，该干嘛干嘛去。
 
-## LLM 配置（可选）
-编辑 `config.py`：
-- `LLM_ENABLED = True/False`：是否启用 LLM 辅助。
-- `LLM_FULL_MODE = True/False`：是否启用全 LLM 辅助模式（调试项，默认关闭；开启后 LLM 优先，题库回退）。
-- `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`：模型服务配置。
-- `LLM_ENABLE_THINKING = True/False`：是否开启模型深度思考（Qwen/Ollama）。
+---
 
-不使用 LLM 时，将 `LLM_ENABLED` 设为 `False` 即可。
+## 🔧 高端玩家操作区
 
-### Ollama 全LLM模式推荐配置
-```python
-LLM_ENABLED = True
-LLM_FULL_MODE = True
-LLM_API_KEY = ""
-LLM_BASE_URL = "http://localhost:11434"
-LLM_MODEL = "qwen3.5:4b"
-LLM_ENABLE_THINKING = False
-```
+如果你觉得“我不是猴子，我想折腾”：
+1. 找到 `config.example.py`，把它复制一份，改名为 `config.py`。
+2. 自己打开看着里面的注释改大模型配置等等。改崩了别慌，右上角点X，把文件删了重新复制一份。大不了重头再来！
 
-### Release 版 EXE 如何启用 LLM
-- 首次运行 `FuckWeici.exe` 时，如果目录里没有 `config.py`，程序会自动生成。
-- 打开生成的 `config.py`，填写 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 后重启 exe。
-- 也可直接用环境变量覆盖：`LLM_ENABLED`、`LLM_FULL_MODE`、`LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`、`LLM_ENABLE_THINKING`。
+---
 
-## 常见问题
-- `uv` 未找到：先安装 uv，或执行 `winget install --id=astral-sh.uv -e`。
-- 设备连不上：先执行 `adb devices` 检查连接，再尝试 `adb kill-server` 后重连。
-- 启动报 uiautomator2 相关错误：执行 `uv run python -m uiautomator2 init` 后重试。
-- 识别失败：确保维词在前台，且停在答题界面。
+## 🤔 “救命！它不动了！” —— 常见问题自救指南
 
-## 项目结构
-- `VictorApp.py`：主流程与题型处理。
-- `SearchResult.py`：本地题库检索。
-- `LLMHelper.py`：LLM 调用封装。
-- `config.py`：LLM 配置。
-- `db/weici_ext459.db`：主题库（默认优先加载）。
-- `db` 数据来源（Android）：`/data/data/com.android.weici.senior.student/databases/`
+- **Q：黑框报错提示“找不到设备/初始化失败”？**  
+  **A**：拔了数据线重插！如果用的是模拟器，重启模拟器！如果还不行，把电脑也重启了。“重启”是人类解决电子设备问题的终极魔法。
 
-## 依赖管理说明
-- 项目使用 `uv + pyproject.toml` 管理依赖。
-- 依赖定义在 `pyproject.toml` 的 `[project.dependencies]`。
+- **Q：万词王模式突然停下来了，并且骂我让我手工选答案？**
+  **A**：大模型也有脑抽的时候，如果它没找到答案（比如它看不懂英译汉），程序会暂停呼唤主人的援助。用你尊贵的手指随便选一个正确答案，程序马上就会继续干活，连回车都不用敲。
 
-## 参考
-- [B站视频-BV18z4y1x7N6](https://www.bilibili.com/video/BV18z4y1x7N6)
-- [uiautomator2 项目](https://github.com/openatx/uiautomator2)
+---
+
+**📜 免责声明**：  
+本脚本仅用于 Python 自动化和摸鱼技术的学习交流。如果你因为刷得太疯狂被系统封号了，请自行承担后果。好好学习，天天向上！😎
