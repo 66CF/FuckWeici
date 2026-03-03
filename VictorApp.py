@@ -108,6 +108,7 @@ class U2VictorApp:
         # --- 结束初始化 ---
 
         self.lastType = ''
+        self.is_king_mode = False
         self.position = 1
         self.runTime = 0
         try:
@@ -187,9 +188,19 @@ class U2VictorApp:
         pos1_text = position_elements[0].text
         pos2_text = position_elements[1].text
         if not pos1_text or not pos2_text: return 1 
-        pos1 = int(pos1_text.split('/')[0])
-        pos2 = int(pos2_text.split('/')[0])
-        return 1 if pos1 > pos2 else -1
+        
+        try:
+            # 尝试提取得分或关卡的纯数字 (兼容 "第x关" 和 "x/y")
+            match1 = re.search(r'\d+', pos1_text)
+            match2 = re.search(r'\d+', pos2_text)
+            if match1 and match2:
+                pos1 = int(match1.group())
+                pos2 = int(match2.group())
+                return 1 if pos1 > pos2 else -1
+            else:
+                return 1
+        except Exception:
+            return 1
 
     def solveTitle(self, mode):
         if mode in self.TITLES:
@@ -203,6 +214,14 @@ class U2VictorApp:
             raise ValueError("未读取到题号文本")
 
         title = title.strip()
+        
+        match_king = re.search(r"第\s*\d+\s*关", title)
+        if match_king:
+            self.is_king_mode = True
+            vlog(f"进入万词王模式: 获取总题数耗时: {time.time() - start_time:.4f} 秒")
+            return 100
+            
+        self.is_king_mode = False
         match = re.search(r"(\d+)\s*/\s*(\d+)", title)
         if not match:
             raise ValueError(f"无法解析题号文本: {title!r}")
@@ -239,6 +258,8 @@ class U2VictorApp:
                 else:
                     log_warn("拼写: LLM 未能提供有效答案。")
             # --- 结束LLM ---
+            if self.is_king_mode:
+                raise Exception("万词王模式人工介入: 拼写无法提取美式音标")
             log_warn("拼写: 无法提取美式音标，将试错")
             self.d(resourceId=f"{self.pkg_name}:id/key_A").click()
             self.d(resourceId=self.ID_KEY_CONFIRM).click()
@@ -261,6 +282,13 @@ class U2VictorApp:
                 else:
                     log_warn("拼写: LLM 未能提供有效答案。")
             # --- 结束LLM ---
+            if self.is_king_mode:
+                raise Exception("万词王模式人工介入: 拼写未找到答案")
+            log_warn("拼写: 无答案，将试错")
+            self.d(resourceId=f"{self.pkg_name}:id/key_A").click()
+            self.d(resourceId=self.ID_KEY_CONFIRM).click()
+            time.sleep(3)
+            return
         
         word = words[0]
         if len(words) > 1:
@@ -308,6 +336,8 @@ class U2VictorApp:
                     time.sleep(self.relaxTime)
                     return
                 log_warn("构词法: LLM 未能提供有效答案。")
+            if self.is_king_mode:
+                raise Exception("万词王模式人工介入: 构词法无答案")
             log_warn("构词法: 无题库命中，将试错")
             if clickable_text_views:
                 clickable_text_views[randint(0, len(clickable_text_views)-1)].click()
@@ -366,17 +396,33 @@ class U2VictorApp:
         self.lastType = '英译汉'
         
         english_words = self.d.xpath(f'//*[@resource-id="{self.ID_ENGLISH}"]').all()
-        word = english_words[0].text if self.position == 1 else english_words[-1].text
+        raw_word = english_words[0].text if self.position == 1 else english_words[-1].text
+        # 如果 UI 包含了英标/换行，只取第一行的单词部分
+        word = raw_word.split('\n')[0].strip() if raw_word else ''
+        # 如果还在同一行包含英标等，则使用正则仅提取前面的纯英文、空格或连字符部分
+        match = re.match(r"^[a-zA-Z\s\-\(\)\.\']+", word)
+        if match:
+            word = match.group(0).strip()
+        
         choice_A, choice_B, choice_C = self.__get_choice_elements()
         if not all([choice_A, choice_B, choice_C]):
             log_err("英译汉: 选项获取失败，跳过")
             return
 
-        resultList = self.searcher.getEnglishtoChinese(self.filter_chinese_and_english(word))
+        print(f"[{self.lastType}] 提取原始英文: {repr(raw_word)}")
+        print(f"[{self.lastType}] 分割后单英文: {repr(word)}")
+        print(f"[{self.lastType}] 选项A: {repr(choice_A.text)}")
+        print(f"[{self.lastType}] 选项B: {repr(choice_B.text)}")
+        print(f"[{self.lastType}] 选项C: {repr(choice_C.text)}")
+
+        resultList = self.searcher.getEnglishtoChinese(word)
+        print(f"[{self.lastType}] 题库直接匹配结果: {resultList}")
         
         if resultList:
             for result in resultList:
                 clean_result = result[4:-1]
+                # 兼容全角/半角符号，将选项直接拿去匹配可能会失败，但由于部分代码耦合，暂时先保留原来的匹配逻辑
+                print(f"[{self.lastType}] 检查 clean_result: {repr(clean_result)}")
                 if choice_A.text.replace('A. ', '') in clean_result:
                     choice_A.click(); log_ok(f"英译汉: {word} -> {choice_A.text.replace('A. ', '')}")
                     time.sleep(self.relaxTime)
@@ -391,6 +437,8 @@ class U2VictorApp:
                     return
 
         answer_means = self.searcher.getMeanFromWord(word)
+        print(f"[{self.lastType}] 题库搜索 word 的含义: {answer_means}")
+        
         buttons = [choice_A, choice_B, choice_C]
         choices_text = [c.text.replace(f'{chr(65+i)}. ', '') for i, c in enumerate(buttons)]
         rates = [0, 0, 0]
@@ -401,6 +449,9 @@ class U2VictorApp:
                 rate = self.compareWordsMean(cleaned_answer, cleaned_choice)
                 if rate > rates[i]:
                     rates[i] = rate
+                    
+        print(f"[{self.lastType}] 相似度: {rates}")
+
 
         if max(rates) > 0.5:
             best_choice_index = rates.index(max(rates))
@@ -424,6 +475,8 @@ class U2VictorApp:
                 log_warn("英译汉: LLM 未能提供有效答案。")
         # --- 结束LLM ---
         
+        if self.is_king_mode:
+            raise Exception("万词王模式人工介入: 英译汉无答案")
         buttons[randint(0, 2)].click()
         log_warn("英译汉: 无答案，将试错")
         time.sleep(3)
@@ -462,14 +515,17 @@ class U2VictorApp:
             buttons = [choice_A, choice_B, choice_C]
             choices_text = [c.text.replace(f'{chr(65+i)}. ', '') for i, c in enumerate(buttons)]
             rates = [0, 0, 0]
-            question_means = text.split('；')
+            question_means = re.split(r'[;；,，]', text)
 
             for i, choice_word in enumerate(choices_text):
                 choice_means_list = self.searcher.getMeanFromWord(choice_word)
                 for choice_mean in choice_means_list:
                     clean_choice_mean = self.reSaveChinese(choice_mean)
                     for q_mean in question_means:
-                        rate = self.compareWordsMean(q_mean, clean_choice_mean)
+                        clean_q_mean = self.reSaveChinese(q_mean)
+                        if not clean_q_mean or not clean_choice_mean:
+                            continue
+                        rate = self.compareWordsMean(clean_q_mean, clean_choice_mean)
                         if rate > rates[i]:
                             rates[i] = rate
             
@@ -493,6 +549,8 @@ class U2VictorApp:
                 log_warn("大杂烩: LLM 未能提供有效答案。")
         # --- 结束LLM ---
         
+        if self.is_king_mode:
+            raise Exception("万词王模式人工介入: 大杂烩无答案")
         log_warn("大杂烩: 无答案，将试错")
         choices = [choice_A, choice_B, choice_C]
         choices[randint(0, 2)].click()
@@ -527,6 +585,8 @@ class U2VictorApp:
                     time.sleep(self.relaxTime)
                     return
 
+        if self.is_king_mode:
+            raise Exception("万词王模式人工介入: 听音识词无答案")
         log_warn("听音识词: 题库未命中，将随机选择")
         choices = [choice_A, choice_B, choice_C]
         choices[randint(0, 2)].click()
@@ -547,7 +607,21 @@ class U2VictorApp:
 if __name__ == "__main__":
     try:
         connect_start_time = time.time()
-        d = u2.connect()
+        try:
+            d = u2.connect()
+        except Exception as connect_e:
+            if "Can't find any android device" in str(connect_e) or "emulator" in str(connect_e):
+                log_warn("未找到设备，尝试重启 adb 服务...")
+                import subprocess
+                subprocess.run(["adb", "kill-server"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                time.sleep(1)
+                subprocess.run(["adb", "start-server"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                time.sleep(3)
+                log_info("重启 adb 成功，重新尝试连接...")
+                d = u2.connect()
+            else:
+                raise connect_e
+                
         log_ok(f"设备连接成功 ({d.device_info})")
         # 实例化 app 对象时，SearchResult 的 __init__ 会被调用并打印其耗时
         app_init_start_time = time.time()
@@ -573,6 +647,11 @@ if __name__ == "__main__":
                         title_type = app.tellTitle()
                         app.solveTitle(title_type)
                     except Exception as e:
+                        if "万词王模式人工介入" in str(e):
+                            log_warn(str(e))
+                            log_warn('请手动完成这一题后，按回车键继续...')
+                            input()
+                            continue
                         log_err(f'发生错误，请手动完成一题后按回车继续: {e}')
                         import traceback
                         traceback.print_exc()
