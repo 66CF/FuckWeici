@@ -90,14 +90,18 @@ class U2VictorApp:
         self.searcher = SearchResult()
         # --- 初始化 LLM 助手 ---
         self.llm_helper = None
+        self.llm_full_mode = False
         if LLM_AVAILABLE:
             llm_settings = load_llm_settings()
             if llm_settings.get("created_config"):
                 log_warn(f"未找到 config.py，已自动生成: {llm_settings.get('config_path')}")
-                log_warn("请填写 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL 后重启程序。")
+                log_warn("请填写 LLM_BASE_URL / LLM_MODEL（如需远程模型再填 LLM_API_KEY）后重启程序。")
             self.llm_helper = LLMHelper(llm_settings)
             if self.llm_helper.is_enabled():
                 log_info("LLM 辅助答题已启用。")
+                self.llm_full_mode = self.llm_helper.is_full_mode()
+                if self.llm_full_mode:
+                    log_info("全LLM辅助模式已启用：优先使用 LLM 作答。")
             elif llm_settings.get("enabled"):
                 log_warn("LLM 已开启但配置不完整，辅助答题功能将不可用。")
                 log_warn(f"配置文件位置: {llm_settings.get('config_path')}")
@@ -121,6 +125,28 @@ class U2VictorApp:
 
     def _expected_count(self, title_name):
         return 2 if self.lastType == title_name else 1
+
+    def _is_llm_enabled(self):
+        return self.llm_helper and self.llm_helper.is_enabled()
+
+    def _click_choice_by_answer_char(self, answer_char, choice_A, choice_B, choice_C, log_prefix):
+        if answer_char == 'A':
+            choice_A.click(); log_ok(f"{log_prefix}: {choice_A.text}"); time.sleep(self.relaxTime); return True
+        if answer_char == 'B':
+            choice_B.click(); log_ok(f"{log_prefix}: {choice_B.text}"); time.sleep(self.relaxTime); return True
+        if answer_char == 'C':
+            choice_C.click(); log_ok(f"{log_prefix}: {choice_C.text}"); time.sleep(self.relaxTime); return True
+        return False
+
+    def _try_llm_choice(self, question_text, choice_A, choice_B, choice_C, log_prefix):
+        if not self._is_llm_enabled():
+            return False
+        choices_dict = {'A': choice_A.text, 'B': choice_B.text, 'C': choice_C.text}
+        answer_char = self.llm_helper.answer_choice_question(question_text, choices_dict)
+        if self._click_choice_by_answer_char(answer_char, choice_A, choice_B, choice_C, log_prefix):
+            return True
+        log_warn(f"{log_prefix}: LLM 未能提供有效答案。")
+        return False
 
     def _get_title_counts(self):
         return {
@@ -242,11 +268,24 @@ class U2VictorApp:
         all_chinese = self.d.xpath(f'//*[@resource-id="{self.ID_CHINESE}"]').all()
         noteText = all_yinbiao[0].text if self.position == 1 else all_yinbiao[-1].text
         mean = self.reSaveChinese(all_chinese[0].text if self.position == 1 else all_chinese[-1].text)
+        llm_tried = False
+
+        if self.llm_full_mode and self._is_llm_enabled():
+            llm_tried = True
+            word = self.llm_helper.answer_spelling(mean, noteText)
+            if word:
+                log_ok(f"拼写 (LLM): {word}")
+                for char in word:
+                    self.d(resourceId=f"{self.pkg_name}:id/key_{char.upper()}", clickable=True).click()
+                self.d(resourceId=self.ID_KEY_CONFIRM).click()
+                time.sleep(self.relaxTime)
+                return
+            log_warn("拼写: 全LLM模式未能提供有效答案，回退题库。")
 
         match = re.search(r"美\[(.+)\]", noteText)
         if not match:
             # --- LLM 辅助 ---
-            if self.llm_helper and self.llm_helper.is_enabled():
+            if not llm_tried and self._is_llm_enabled():
                 word = self.llm_helper.answer_spelling(mean, noteText)
                 if word:
                     log_ok(f"拼写 (LLM): {word}")
@@ -270,7 +309,7 @@ class U2VictorApp:
         words = self.searcher.noteSearchWord(note_USA)
         if not words: # 如果题库没找到
             # --- LLM 辅助 ---
-            if self.llm_helper and self.llm_helper.is_enabled():
+            if not llm_tried and self._is_llm_enabled():
                 word = self.llm_helper.answer_spelling(mean, noteText)
                 if word:
                     log_ok(f"拼写 (LLM): {word}")
@@ -317,6 +356,21 @@ class U2VictorApp:
 
         clickable_text_views = self.d.xpath('//android.widget.TextView[@clickable="true"]').all()
         parts_on_screen = [elem.text for elem in clickable_text_views]
+        llm_tried = False
+
+        if self.llm_full_mode and self._is_llm_enabled():
+            llm_tried = True
+            llm_parts = self.llm_helper.answer_build_word(part_word, parts_on_screen)
+            if llm_parts:
+                log_ok(f"构词法 (LLM): 点击 {' + '.join(llm_parts)}")
+                for part_to_click in llm_parts:
+                    for elem in clickable_text_views:
+                        if elem.text == part_to_click:
+                            elem.click()
+                            break
+                time.sleep(self.relaxTime)
+                return
+            log_warn("构词法: 全LLM模式未能提供有效答案，回退题库。")
         
         # candidates 现在是这样的列表: [{'word': 'organise', 'parts_to_click': ['ise']}, ...]
         candidates = self.searcher.getPutAnswer(part_word, parts_on_screen, self.position)
@@ -324,7 +378,7 @@ class U2VictorApp:
         best_candidate_parts = []
 
         if not candidates:
-            if self.llm_helper and self.llm_helper.is_enabled():
+            if not llm_tried and self._is_llm_enabled():
                 llm_parts = self.llm_helper.answer_build_word(part_word, parts_on_screen)
                 if llm_parts:
                     log_ok(f"构词法 (LLM): 点击 {' + '.join(llm_parts)}")
@@ -415,26 +469,35 @@ class U2VictorApp:
         print(f"[{self.lastType}] 选项B: {repr(choice_B.text)}")
         print(f"[{self.lastType}] 选项C: {repr(choice_C.text)}")
 
+        if self.llm_full_mode:
+            question_text = f"单词 '{word}' 的中文意思是什么？"
+            if self._try_llm_choice(question_text, choice_A, choice_B, choice_C, f"英译汉 (LLM优先) {word}"):
+                return
+
         resultList = self.searcher.getEnglishtoChinese(word)
         print(f"[{self.lastType}] 题库直接匹配结果: {resultList}")
         
         if resultList:
             for result in resultList:
                 clean_result = result[4:-1]
-                # 兼容全角/半角符号，将选项直接拿去匹配可能会失败，但由于部分代码耦合，暂时先保留原来的匹配逻辑
                 print(f"[{self.lastType}] 检查 clean_result: {repr(clean_result)}")
-                if choice_A.text.replace('A. ', '') in clean_result:
-                    choice_A.click(); log_ok(f"英译汉: {word} -> {choice_A.text.replace('A. ', '')}")
-                    time.sleep(self.relaxTime)
-                    return
-                elif choice_B.text.replace('B. ', '') in clean_result:
-                    choice_B.click(); log_ok(f"英译汉: {word} -> {choice_B.text.replace('B. ', '')}")
-                    time.sleep(self.relaxTime)
-                    return
-                elif choice_C.text.replace('C. ', '') in clean_result:
-                    choice_C.click(); log_ok(f"英译汉: {word} -> {choice_C.text.replace('C. ', '')}")
-                    time.sleep(self.relaxTime)
-                    return
+                # 双向 in 匹配：题库答案可能比选项短（如 '决定；决心' vs '决定；决心；果断'）
+                buttons_list = [choice_A, choice_B, choice_C]
+                prefixes = ['A. ', 'B. ', 'C. ']
+                for btn, prefix in zip(buttons_list, prefixes):
+                    choice_text = btn.text.replace(prefix, '')
+                    if choice_text in clean_result or clean_result in choice_text:
+                        btn.click(); log_ok(f"英译汉: {word} -> {choice_text}")
+                        time.sleep(self.relaxTime)
+                        return
+                # 兜底: 脱水到纯汉字后再比对（兼容全角/半角括号等符号差异）
+                clean_result_cn = self.reSaveChinese(clean_result)
+                for btn, prefix in zip(buttons_list, prefixes):
+                    choice_cn = self.reSaveChinese(btn.text.replace(prefix, ''))
+                    if choice_cn in clean_result_cn or clean_result_cn in choice_cn:
+                        btn.click(); log_ok(f"英译汉: {word} -> {btn.text.replace(prefix, '')} (汉字兜底)")
+                        time.sleep(self.relaxTime)
+                        return
 
         answer_means = self.searcher.getMeanFromWord(word)
         print(f"[{self.lastType}] 题库搜索 word 的含义: {answer_means}")
@@ -453,7 +516,7 @@ class U2VictorApp:
         print(f"[{self.lastType}] 相似度: {rates}")
 
 
-        if max(rates) > 0.5:
+        if max(rates) >= 0.5:
             best_choice_index = rates.index(max(rates))
             buttons[best_choice_index].click()
             log_info(f"英译汉: {word} -> 机器识别 {choices_text[best_choice_index]}")
@@ -461,18 +524,10 @@ class U2VictorApp:
             return
 
         # --- LLM 辅助 ---
-        if self.llm_helper and self.llm_helper.is_enabled():
+        if self._is_llm_enabled():
             question_text = f"单词 '{word}' 的中文意思是什么？"
-            choices_dict = {'A': choice_A.text, 'B': choice_B.text, 'C': choice_C.text}
-            answer_char = self.llm_helper.answer_choice_question(question_text, choices_dict)
-            if answer_char == 'A':
-                choice_A.click(); log_ok(f"英译汉 (LLM): {word} -> {choice_A.text}"); time.sleep(self.relaxTime); return
-            elif answer_char == 'B':
-                choice_B.click(); log_ok(f"英译汉 (LLM): {word} -> {choice_B.text}"); time.sleep(self.relaxTime); return
-            elif answer_char == 'C':
-                choice_C.click(); log_ok(f"英译汉 (LLM): {word} -> {choice_C.text}"); time.sleep(self.relaxTime); return
-            else:
-                log_warn("英译汉: LLM 未能提供有效答案。")
+            if self._try_llm_choice(question_text, choice_A, choice_B, choice_C, f"英译汉 (LLM) {word}"):
+                return
         # --- 结束LLM ---
         
         if self.is_king_mode:
@@ -493,6 +548,10 @@ class U2VictorApp:
             return
 
         clean_text = self.filter_chinese_and_english(text)
+
+        if self.llm_full_mode:
+            if self._try_llm_choice(text, choice_A, choice_B, choice_C, "大杂烩 (LLM优先)"):
+                return
         
         if self.is_chinese(text):
             vlog('大杂烩子类: 汉译英')
@@ -515,38 +574,40 @@ class U2VictorApp:
             buttons = [choice_A, choice_B, choice_C]
             choices_text = [c.text.replace(f'{chr(65+i)}. ', '') for i, c in enumerate(buttons)]
             rates = [0, 0, 0]
-            question_means = re.split(r'[;；,，]', text)
+            question_means = re.split(r'[;；,，、\(\)（）\s]+', text)
+            question_means = [q for q in question_means if q]
+            clean_question_tokens = [self.reSaveChinese(q) for q in question_means if self.reSaveChinese(q)]
+            clean_question_full = self.reSaveChinese(text)
+            if clean_question_full and clean_question_full not in clean_question_tokens:
+                clean_question_tokens.append(clean_question_full)
 
             for i, choice_word in enumerate(choices_text):
                 choice_means_list = self.searcher.getMeanFromWord(choice_word)
                 for choice_mean in choice_means_list:
                     clean_choice_mean = self.reSaveChinese(choice_mean)
-                    for q_mean in question_means:
-                        clean_q_mean = self.reSaveChinese(q_mean)
-                        if not clean_q_mean or not clean_choice_mean:
+                    if not clean_choice_mean:
+                        continue
+                    for clean_q_mean in clean_question_tokens:
+                        if not clean_q_mean:
+                            continue
+                        # 优先命中包含关系，例如“情节”可以命中“故事戏剧等中的情节”
+                        if clean_choice_mean in clean_q_mean or clean_q_mean in clean_choice_mean:
+                            rates[i] = max(rates[i], 1.0)
                             continue
                         rate = self.compareWordsMean(clean_q_mean, clean_choice_mean)
                         if rate > rates[i]:
                             rates[i] = rate
             
-            if max(rates) > 0.5:
+            if max(rates) >= 0.5:
                 buttons[rates.index(max(rates))].click()
                 log_info(f"大杂烩: 机器识别 -> {choices_text[rates.index(max(rates))]}")
                 time.sleep(self.relaxTime)
                 return
         
         # --- LLM 辅助 ---
-        if self.llm_helper and self.llm_helper.is_enabled():
-            choices_dict = {'A': choice_A.text, 'B': choice_B.text, 'C': choice_C.text}
-            answer_char = self.llm_helper.answer_choice_question(text, choices_dict)
-            if answer_char == 'A':
-                choice_A.click(); log_ok(f"大杂烩 (LLM): {choice_A.text}"); time.sleep(self.relaxTime); return
-            elif answer_char == 'B':
-                choice_B.click(); log_ok(f"大杂烩 (LLM): {choice_B.text}"); time.sleep(self.relaxTime); return
-            elif answer_char == 'C':
-                choice_C.click(); log_ok(f"大杂烩 (LLM): {choice_C.text}"); time.sleep(self.relaxTime); return
-            else:
-                log_warn("大杂烩: LLM 未能提供有效答案。")
+        if self._is_llm_enabled():
+            if self._try_llm_choice(text, choice_A, choice_B, choice_C, "大杂烩 (LLM)"):
+                return
         # --- 结束LLM ---
         
         if self.is_king_mode:
@@ -568,6 +629,11 @@ class U2VictorApp:
             choice_B.text.replace('B. ', '').strip(),
             choice_C.text.replace('C. ', '').strip()
         ]
+
+        if self.llm_full_mode:
+            question_text = "听音识词题：请根据发音在选项中选择正确单词。"
+            if self._try_llm_choice(question_text, choice_A, choice_B, choice_C, "听音识词 (LLM优先)"):
+                return
         
         raw_answer_from_db = self.searcher.getListenAnswer(choices_text_list)
         
@@ -584,6 +650,11 @@ class U2VictorApp:
                     log_ok(f"听音识词: 命中题库 -> {answer_from_db}")
                     time.sleep(self.relaxTime)
                     return
+
+        if self._is_llm_enabled():
+            question_text = "听音识词题：请根据发音在选项中选择正确单词。"
+            if self._try_llm_choice(question_text, choice_A, choice_B, choice_C, "听音识词 (LLM)"):
+                return
 
         if self.is_king_mode:
             raise Exception("万词王模式人工介入: 听音识词无答案")

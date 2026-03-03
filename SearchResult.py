@@ -1,5 +1,7 @@
 import json
 import os
+import re
+import sqlite3
 import time
 from collections import defaultdict
 
@@ -7,30 +9,16 @@ from collections import defaultdict
 class SearchResult:
     def __init__(self):
         self.verbose = os.getenv("FW_VERBOSE", "1").strip().lower() in {"1", "true", "yes", "on"}
+        self.db_path = os.getenv("FW_DB_PATH", os.path.join("db", "weici_ext459.db"))
         init_start_time = time.time()
         self._log("--- SearchResult 初始化 ---")
 
-        load_start_time = time.time()
-        with open("Data/fb_word_detail.json", "r", encoding="utf-8") as f:
-            self.DATA = json.load(f)
-        self._log(f"  - [IO] 'fb_word_detail.json' 加载完毕 ({time.time() - load_start_time:.4f}s)")
-
-        word_corr_start_time = time.time()
-        if not os.path.exists("Data/WordCorresponding.json"):
-            self._log("  - [!] 'WordCorresponding.json' 不存在, 开始生成...")
-            self.WordCorresponding = self.generateWordCorresponding()
-            with open("Data/WordCorresponding.json", "w", encoding="utf-8") as f:
-                json.dump(self.WordCorresponding, f, ensure_ascii=False, indent=4)
-            self._log(f"  - [CPU] 'WordCorresponding.json' 生成完毕 ({time.time() - word_corr_start_time:.4f}s)")
-        else:
-            with open("Data/WordCorresponding.json", "r", encoding="utf-8") as f:
-                self.WordCorresponding = json.load(f)
-            self._log(f"  - [IO] 'WordCorresponding.json' 加载完毕 ({time.time() - word_corr_start_time:.4f}s)")
-
-        load_start_time = time.time()
-        with open("Data/newAnswer.json", "r", encoding="utf-8") as f:
-            self.newDATA = json.load(f)
-        self._log(f"  - [IO] 'newAnswer.json' 加载完毕 ({time.time() - load_start_time:.4f}s)")
+        self.WordCorresponding = {}
+        self.newDATA = {}
+        if not self._load_from_db():
+            raise RuntimeError(
+                f"题库数据库加载失败，请检查文件: {self.db_path}（可用 FW_DB_PATH 指定路径）"
+            )
 
         self._build_indexes()
         self._log(f"--- 初始化完成 (总耗时: {time.time() - init_start_time:.4f}s) ---")
@@ -56,6 +44,109 @@ class SearchResult:
         self._build_word_indexes = self._build_question_indexes("构词法")
         self._listen_answer_map = self._build_listen_answer_map()
 
+    def _normalize_question_text(self, text):
+        return "".join(re.findall(r"[a-zA-Z\u4e00-\u9fa5]+", str(text or "")))
+
+    def _format_answer(self, answer):
+        normalized = str(answer or "").strip().strip("'\"")
+        return f"'{normalized}'" if normalized else ""
+
+    def _strip_choice_prefix(self, choice):
+        return re.sub(r"^[A-D]\.\s*", "", str(choice or "").strip())
+
+    def _split_build_parts(self, value):
+        if value is None:
+            return []
+        return [part.strip() for part in re.split(r"[,\s，]+", str(value)) if part.strip()]
+
+    def _append_qa(self, qa_section, question, answer):
+        if not question or not answer:
+            return
+        qa_section[0].append(question)
+        qa_section[1].append(answer)
+
+    def _build_new_data_from_db(self, conn):
+        new_data = {
+            "听音识词": [[], []],
+            "语境题": [[], []],
+            "构词法": [[], [], []],
+            "汉译英": [[], []],
+            "英译汉": [[], []],
+        }
+        cursor = conn.cursor()
+        rows = cursor.execute(
+            """
+            SELECT questions, subject, answer, answer_a, answer_b, answer_c, spell_word
+            FROM fb_word_test
+            WHERE "delete" = 0
+            """
+        ).fetchall()
+        for questions, subject, answer, answer_a, answer_b, answer_c, spell_word in rows:
+            q_type = int(questions or 0)
+            normalized_answer = self._format_answer(answer)
+            if q_type == 6:
+                options = [
+                    self._strip_choice_prefix(answer_a),
+                    self._strip_choice_prefix(answer_b),
+                    self._strip_choice_prefix(answer_c),
+                ]
+                if all(options) and normalized_answer:
+                    new_data["听音识词"][0].append(options)
+                    new_data["听音识词"][1].append(normalized_answer)
+            elif q_type in (4, 5):
+                question = self._normalize_question_text(subject)
+                self._append_qa(new_data["语境题"], question, normalized_answer)
+            elif q_type == 3:
+                question = self._normalize_question_text(subject)
+                self._append_qa(new_data["汉译英"], question, normalized_answer)
+            elif q_type == 2:
+                question = str(subject or "").strip()
+                self._append_qa(new_data["英译汉"], question, normalized_answer)
+            elif q_type == 7:
+                question = self._normalize_question_text(subject)
+                full_parts = self._split_build_parts(answer)
+                select_parts = self._split_build_parts(spell_word)
+                if question and full_parts:
+                    new_data["构词法"][0].append(question)
+                    new_data["构词法"][1].append(select_parts)
+                    new_data["构词法"][2].append(full_parts)
+        return new_data
+
+    def _build_word_corresponding_from_db(self, conn):
+        details = []
+        cursor = conn.cursor()
+        rows = cursor.execute(
+            """
+            SELECT detail_json
+            FROM fb_word_detail
+            WHERE "delete" = 0 AND detail_json IS NOT NULL AND TRIM(detail_json) <> ''
+            """
+        ).fetchall()
+        for (detail_json,) in rows:
+            try:
+                details.append(json.loads(detail_json))
+            except json.JSONDecodeError:
+                continue
+        return self.generateWordCorresponding(details)
+
+    def _load_from_db(self):
+        if not os.path.exists(self.db_path):
+            self._log(f"  - [DB] 未找到数据库: {self.db_path}")
+            return False
+        db_start_time = time.time()
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                self.WordCorresponding = self._build_word_corresponding_from_db(conn)
+                self.newDATA = self._build_new_data_from_db(conn)
+            if not self.WordCorresponding.get("words") or not self.newDATA.get("语境题", [[], []])[0]:
+                self._log("  - [DB] 数据为空或结构异常")
+                return False
+            self._log(f"  - [DB] 题库加载完毕 ({time.time() - db_start_time:.4f}s) -> {self.db_path}")
+            return True
+        except (sqlite3.Error, OSError) as exc:
+            self._log(f"  - [DB] 加载失败: {exc}")
+            return False
+
     def _build_question_answer_map(self, key):
         section = self.newDATA.get(key, [])
         if not isinstance(section, list) or len(section) < 2:
@@ -65,7 +156,16 @@ class SearchResult:
         answers = section[1] if isinstance(section[1], list) else []
         result = defaultdict(list)
         for q, a in zip(questions, answers):
-            result[q].append(a)
+            q_raw = str(q or "").strip()
+            if not q_raw:
+                continue
+            result[q_raw].append(a)
+            q_norm = self._normalize_question_text(q_raw)
+            if q_norm and q_norm != q_raw:
+                result[q_norm].append(a)
+            q_lower = q_raw.lower()
+            if q_lower != q_raw:
+                result[q_lower].append(a)
         return result
 
     def _build_question_indexes(self, key):
@@ -101,13 +201,13 @@ class SearchResult:
                 answer_map[key] = answer
         return answer_map
 
-    def generateWordCorresponding(self):
+    def generateWordCorresponding(self, data):
         """创建单词 音标 词性 意思列表"""
         words = []
         word_notes = []
         word_parts = []
         word_means = []
-        for word_detail in self.DATA:
+        for word_detail in data:
             word_word = word_detail["word"]
             word_note_usa = word_detail["usa_phonetic_symbols"]
             word_part = word_detail["part_of_speech"]
@@ -172,7 +272,7 @@ class SearchResult:
         return [i for i, x in enumerate(input_list) if x == element]
 
     def getLongAnswer(self, question):
-        return self._long_answer_map.get(question, [])
+        return self._query_answers(self._long_answer_map, question)
 
     def getListenAnswer(self, choices):
         key = self._normalize_choice_key(choices)
@@ -213,7 +313,29 @@ class SearchResult:
         return []
 
     def getChinesetoEnglish(self, question):
-        return self._chinese_to_english_map.get(question, [])
+        return self._query_answers(self._chinese_to_english_map, question)
 
     def getEnglishtoChinese(self, question):
-        return self._english_to_chinese_map.get(question, [])
+        return self._query_answers(self._english_to_chinese_map, question)
+
+    def _query_answers(self, answer_map, question):
+        if not answer_map:
+            return []
+        candidates = []
+        query = str(question or "").strip()
+        if query:
+            candidates.append(query)
+            lower_query = query.lower()
+            if lower_query != query:
+                candidates.append(lower_query)
+            norm_query = self._normalize_question_text(query)
+            if norm_query and norm_query not in candidates:
+                candidates.append(norm_query)
+            norm_lower_query = norm_query.lower() if norm_query else ""
+            if norm_lower_query and norm_lower_query not in candidates:
+                candidates.append(norm_lower_query)
+        for key in candidates:
+            result = answer_map.get(key, [])
+            if result:
+                return result
+        return []
