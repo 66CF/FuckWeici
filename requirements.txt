@@ -1,2 +1,0 @@
-uiautomator2
-requests

@@ -63,7 +63,6 @@ winget install --id=astral-sh.uv -e
 ## 依赖管理说明
 - 项目使用 `uv + pyproject.toml` 管理依赖。
 - 依赖定义在 `pyproject.toml` 的 `[project.dependencies]`。
-- `requirements.txt` 为历史文件，不再作为主入口。
 
 ## 参考
 - [B站视频-BV18z4y1x7N6](https://www.bilibili.com/video/BV18z4y1x7N6)
