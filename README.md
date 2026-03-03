@@ -1,20 +1,33 @@
 # FuckWeici
 基于 [uiautomator2](https://github.com/openatx/uiautomator2) 的维词安卓自动答题脚本。
 
-## 快速开始（最简安装）
+## 环境要求
+- Windows 10/11
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- 已安装并可用的 `adb`（Android Platform Tools）
+- Android 设备已开启 USB 调试
 
-### 方式 A：双击安装（推荐，Windows）
-1. 安装 Python 3.10+（安装时勾选 `Add Python to PATH`）。
+## 快速开始（uv）
+
+### 方式 A：双击运行（推荐，Windows）
+1. 先安装 uv。
 2. 双击运行 `安装依赖.bat`。
 3. 手机开启 USB 调试并连接电脑，确认 `adb devices` 能看到设备。
-4. 打开手机维词 App 并停在答题页面。
-5. 双击运行 `启动.bat`。
+4. 首次使用执行一次初始化：`uv run python -m uiautomator2 init`
+5. 打开手机维词 App 并停在答题页面。
+6. 双击运行 `启动.bat`。
 
-### 方式 B：命令行安装（通用）
+### 方式 B：命令行（通用）
 ```bash
-pip install -r requirements.txt
-python -m uiautomator2 init
-python VictorApp.py
+uv python install 3.12
+uv sync
+uv run python -m uiautomator2 init
+uv run python VictorApp.py
+```
+
+## uv 安装示例（Windows）
+```powershell
+winget install --id=astral-sh.uv -e
 ```
 
 ## 功能说明
@@ -35,8 +48,9 @@ python VictorApp.py
 - 也可直接用环境变量覆盖：`LLM_ENABLED`、`LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`。
 
 ## 常见问题
+- `uv` 未找到：先安装 uv，或执行 `winget install --id=astral-sh.uv -e`。
 - 设备连不上：先执行 `adb devices` 检查连接，再尝试 `adb kill-server` 后重连。
-- 启动报 uiautomator2 相关错误：执行 `python -m uiautomator2 init` 后重试。
+- 启动报 uiautomator2 相关错误：执行 `uv run python -m uiautomator2 init` 后重试。
 - 识别失败：确保维词在前台，且停在答题界面。
 
 ## 项目结构
@@ -45,6 +59,11 @@ python VictorApp.py
 - `LLMHelper.py`：LLM 调用封装。
 - `config.py`：LLM 配置。
 - `Data/`：题库数据。
+
+## 依赖管理说明
+- 项目使用 `uv + pyproject.toml` 管理依赖。
+- 依赖定义在 `pyproject.toml` 的 `[project.dependencies]`。
+- `requirements.txt` 为历史文件，不再作为主入口。
 
 ## 参考
 - [B站视频-BV18z4y1x7N6](https://www.bilibili.com/video/BV18z4y1x7N6)
