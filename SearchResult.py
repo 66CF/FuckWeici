@@ -1,215 +1,219 @@
-# --- START OF FILE SearchResult.py (Optimized) ---
+import json
+import os
+import time
+from collections import defaultdict
 
-import json, os
-import itertools
-import time # 导入 time 模块
 
-class SearchResult():
+class SearchResult:
     def __init__(self):
-        # 记录整个初始化的开始时间
+        self.verbose = os.getenv("FW_VERBOSE", "1").strip().lower() in {"1", "true", "yes", "on"}
         init_start_time = time.time()
-        print("--- SearchResult 初始化 ---")
+        self._log("--- SearchResult 初始化 ---")
 
-        # 计时加载 fb_word_detail.json
         load_start_time = time.time()
-        with open('Data/fb_word_detail.json', 'r', encoding='utf-8') as self.f:
-            self.DATA = json.loads(self.f.read())
-        print(f"  - [IO] 'fb_word_detail.json' 加载完毕 ({time.time() - load_start_time:.4f}s)")
+        with open("Data/fb_word_detail.json", "r", encoding="utf-8") as f:
+            self.DATA = json.load(f)
+        self._log(f"  - [IO] 'fb_word_detail.json' 加载完毕 ({time.time() - load_start_time:.4f}s)")
 
-        # 计时生成或加载 WordCorresponding.json
         word_corr_start_time = time.time()
-        if not os.path.exists('Data/WordCorresponding.json'):
-            print("  - [!] 'WordCorresponding.json' 不存在, 开始生成...")
-            with open("Data/WordCorresponding.json",'w',encoding='utf-8') as self.f:
-                self.WordCorresponding = self.generateWordCorresponding()
-                self.f.write(json.dumps(self.WordCorresponding,ensure_ascii=False,indent=4))
-            print(f"  - [CPU] 'WordCorresponding.json' 生成完毕 ({time.time() - word_corr_start_time:.4f}s)")
+        if not os.path.exists("Data/WordCorresponding.json"):
+            self._log("  - [!] 'WordCorresponding.json' 不存在, 开始生成...")
+            self.WordCorresponding = self.generateWordCorresponding()
+            with open("Data/WordCorresponding.json", "w", encoding="utf-8") as f:
+                json.dump(self.WordCorresponding, f, ensure_ascii=False, indent=4)
+            self._log(f"  - [CPU] 'WordCorresponding.json' 生成完毕 ({time.time() - word_corr_start_time:.4f}s)")
         else:
-            with open("Data/WordCorresponding.json", 'r', encoding='utf-8') as self.f:
-                self.WordCorresponding = json.loads(self.f.read())
-            print(f"  - [IO] 'WordCorresponding.json' 加载完毕 ({time.time() - word_corr_start_time:.4f}s)")
+            with open("Data/WordCorresponding.json", "r", encoding="utf-8") as f:
+                self.WordCorresponding = json.load(f)
+            self._log(f"  - [IO] 'WordCorresponding.json' 加载完毕 ({time.time() - word_corr_start_time:.4f}s)")
 
-        # 计时加载 newAnswer.json
         load_start_time = time.time()
-        with open('Data/newAnswer.json', 'r', encoding='utf-8') as self.f:
-            self.newDATA = json.loads(self.f.read())
-        print(f"  - [IO] 'newAnswer.json' 加载完毕 ({time.time() - load_start_time:.4f}s)")
-        
-        print(f"--- 初始化完成 (总耗时: {time.time() - init_start_time:.4f}s) ---")
+        with open("Data/newAnswer.json", "r", encoding="utf-8") as f:
+            self.newDATA = json.load(f)
+        self._log(f"  - [IO] 'newAnswer.json' 加载完毕 ({time.time() - load_start_time:.4f}s)")
 
+        self._build_indexes()
+        self._log(f"--- 初始化完成 (总耗时: {time.time() - init_start_time:.4f}s) ---")
+
+    def _log(self, message):
+        if self.verbose:
+            print(message)
+
+    def _build_indexes(self):
+        self._word_to_indexes = defaultdict(list)
+        self._note_to_indexes = defaultdict(list)
+        words = self.WordCorresponding.get("words", [])
+        notes = self.WordCorresponding.get("notes", [])
+        for idx, word in enumerate(words):
+            self._word_to_indexes[word].append(idx)
+            if idx < len(notes):
+                self._note_to_indexes[notes[idx]].append(idx)
+
+        self._mean_cache = {}
+        self._long_answer_map = self._build_question_answer_map("语境题")
+        self._chinese_to_english_map = self._build_question_answer_map("汉译英")
+        self._english_to_chinese_map = self._build_question_answer_map("英译汉")
+        self._build_word_indexes = self._build_question_indexes("构词法")
+        self._listen_answer_map = self._build_listen_answer_map()
+
+    def _build_question_answer_map(self, key):
+        section = self.newDATA.get(key, [])
+        if not isinstance(section, list) or len(section) < 2:
+            return {}
+
+        questions = section[0] if isinstance(section[0], list) else []
+        answers = section[1] if isinstance(section[1], list) else []
+        result = defaultdict(list)
+        for q, a in zip(questions, answers):
+            result[q].append(a)
+        return result
+
+    def _build_question_indexes(self, key):
+        section = self.newDATA.get(key, [])
+        if not isinstance(section, list) or not section:
+            return {}
+        questions = section[0] if isinstance(section[0], list) else []
+        result = defaultdict(list)
+        for idx, question in enumerate(questions):
+            result[question].append(idx)
+        return result
+
+    def _normalize_choice(self, value):
+        return str(value or "").strip().strip("'\"")
+
+    def _normalize_choice_key(self, choices):
+        normalized = [self._normalize_choice(c) for c in choices]
+        return tuple(sorted(normalized))
+
+    def _build_listen_answer_map(self):
+        section = self.newDATA.get("听音识词", [])
+        if not isinstance(section, list) or len(section) < 2:
+            return {}
+
+        questions = section[0] if isinstance(section[0], list) else []
+        answers = section[1] if isinstance(section[1], list) else []
+        answer_map = {}
+        for options, answer in zip(questions, answers):
+            if not isinstance(options, list):
+                continue
+            key = self._normalize_choice_key(options)
+            if key and key not in answer_map:
+                answer_map[key] = answer
+        return answer_map
 
     def generateWordCorresponding(self):
         """创建单词 音标 词性 意思列表"""
-        self.words = []
-        self.word_notes = []
-        self.word_parts = []
-        self.word_means = [] # 意思过多 用列表作为元素
-        for word in self.DATA:
-            wordDetail = word
-            wordWord = wordDetail['word'] # 单词
-            wordNote_USA = wordDetail['usa_phonetic_symbols'] # 美音标
-            wordPart = wordDetail['part_of_speech'] # 词性
-            if wordPart in ['vt','vi']:
-                wordPart = 'v'
+        words = []
+        word_notes = []
+        word_parts = []
+        word_means = []
+        for word_detail in self.DATA:
+            word_word = word_detail["word"]
+            word_note_usa = word_detail["usa_phonetic_symbols"]
+            word_part = word_detail["part_of_speech"]
+            if word_part in ["vt", "vi"]:
+                word_part = "v"
 
-            wordMean = []
-            for mean in wordDetail['gy_paraphrase']:
-                wordMean.append(mean['chinese'])
+            word_mean = [mean["chinese"] for mean in word_detail.get("gy_paraphrase", [])]
 
-            self.words.append(wordWord)
-            self.word_notes.append(wordNote_USA)
-            self.word_parts.append(wordPart)
-            self.word_means.append(wordMean) # 注意这是列表
+            words.append(word_word)
+            word_notes.append(word_note_usa)
+            word_parts.append(word_part)
+            word_means.append(word_mean)
 
-            # 判断是否有派生词
-            if wordDetail['gy_derivative'] != []:
-                # 存在派生词
-                for wordDerivative in wordDetail['gy_derivative']:
-                    wordWord = wordDerivative['derivative_word']
-                    wordNote_USA = wordDerivative['phonogram']
-                    wordPart = wordDerivative['part_of_speech']
-                    if wordPart in ['vt', 'vi']:
-                        wordPart = 'v'
+            for word_derivative in word_detail.get("gy_derivative", []):
+                derivative_word = word_derivative.get("derivative_word")
+                if not derivative_word:
+                    continue
 
-                    wordMean = [wordDerivative['description']]
+                derivative_note = word_derivative.get("phonogram", "")
+                derivative_part = word_derivative.get("part_of_speech", "")
+                if derivative_part in ["vt", "vi"]:
+                    derivative_part = "v"
+                derivative_mean = [word_derivative.get("description", "")]
 
-                    self.words.append(wordWord)
-                    self.word_notes.append(wordNote_USA)
-                    self.word_parts.append(wordPart)
-                    self.word_means.append(wordMean)  # 注意这是列表
-        return {"words":self.words,"notes":self.word_notes,"parts":self.word_parts,"means":self.word_means}
+                words.append(derivative_word)
+                word_notes.append(derivative_note)
+                word_parts.append(derivative_part)
+                word_means.append(derivative_mean)
+        return {"words": words, "notes": word_notes, "parts": word_parts, "means": word_means}
 
-    def noteSearchWord(self,note):
+    def noteSearchWord(self, note):
         """ 从音标搜找单词 """
-        noteIndexList = self.indexListMore(self.WordCorresponding['notes'],note)
-        if len(noteIndexList) == 1:
-            return [self.WordCorresponding['words'][noteIndexList[0]]]
-        else:
-            result = []
-            for i in noteIndexList:
-                result.append(self.WordCorresponding['words'][i])
-            return result
+        return [self.WordCorresponding["words"][i] for i in self._note_to_indexes.get(note, [])]
 
-    def partSearchWord(self,wholeWord,part):
+    def partSearchWord(self, wholeWord, part):
         """ 从整个单词和词性找单词 """
         for word in wholeWord:
-            if word in self.WordCorresponding["words"]:
-                if part == self.WordCorresponding["parts"][self.WordCorresponding["words"].index(word)]:
+            for idx in self._word_to_indexes.get(word, []):
+                if part == self.WordCorresponding["parts"][idx]:
                     return word
-            else:
-                continue
+        return None
 
-    def getMeanFromWord(self,word):
+    def getMeanFromWord(self, word):
         """ 找单词意思 """
-        meanList = []
-        wordList = self.indexListMore(self.WordCorresponding["words"],word)
-        for i in wordList:
-            mean = self.WordCorresponding['means'][i]
-            for j in mean:
-                if '：' in j:
-                    j = j.replace('：','')
+        if word in self._mean_cache:
+            return self._mean_cache[word]
 
-                if "；" in j:
-                    j = j.split('；')
-                    for h in j:
-                        meanList.append(h)
+        mean_list = []
+        for idx in self._word_to_indexes.get(word, []):
+            for mean in self.WordCorresponding["means"][idx]:
+                normalized_mean = mean.replace("：", "")
+                if "；" in normalized_mean:
+                    mean_list.extend(normalized_mean.split("；"))
                 else:
-                    meanList.append(j)
-        return meanList
+                    mean_list.append(normalized_mean)
 
-    def indexListMore(self,List,element):
+        self._mean_cache[word] = mean_list
+        return mean_list
+
+    def indexListMore(self, input_list, element):
         """ 返回 下标 """
-        return [i for i, x in enumerate(List) if x == element]
+        return [i for i, x in enumerate(input_list) if x == element]
 
-    def getLongAnswer(self,question):
-        try:
-            resultList = []
-            indexs = self.find_indexes(self.newDATA["语境题"][0], question)
-            for i in indexs:
-                resultList.append(self.newDATA["语境题"][1][i])
-            return resultList
-        except Exception as e:
-            return []
+    def getLongAnswer(self, question):
+        return self._long_answer_map.get(question, [])
 
-    def get_all_permutations(self,lst):
-        permutations = list(itertools.permutations(lst))
-        return permutations
+    def getListenAnswer(self, choices):
+        key = self._normalize_choice_key(choices)
+        return self._listen_answer_map.get(key)
 
-    def getListenAnswer(self,choices):
-        allChoices = self.get_all_permutations(choices)
-        for i in allChoices:
-            try:
-                return self.newDATA["听音识词"][1][self.newDATA["听音识词"][0].index(list(i))]
-            except Exception as e:
-                continue
-        else:
-            return 0
+    def find_indexes(self, input_list, element):
+        return [i for i, value in enumerate(input_list) if value == element]
 
-    def find_indexes(self,lst, element):
-        indexes = []
-        for i in range(len(lst)):
-            if lst[i] == element:
-                indexes.append(i)
-        return indexes
-
-    def getPutAnswer(self,question,parts,position):
+    def getPutAnswer(self, question, parts, position):
         func_start_time = time.time()
         found_answers = []
+        indices = self._build_word_indexes.get(question, [])
+        if not indices:
+            self._log(f"    - [getPutAnswer] 未找到答案 (总耗时: {time.time() - func_start_time:.4f}s)")
+            return []
 
-        indexs = self.find_indexes(self.newDATA["构词法"][0], question)
-        for i in indexs:
-            try:
-                # newAnswer.json 中构词法[2]是组成完整单词的所有部分，如 ['strength', 'en']
-                full_word_parts = self.newDATA["构词法"][2][i]
-
-                # --- START OF FIX ---
-                # 不再盲目相信 newAnswer.json 中预设的需点击部分 (构词法[1])
-                # 而是根据"完整组成部分"和"问题本身"动态推导出需要点击的词缀。
-                # 这样可以修正数据库中潜在的数据不一致问题。
-                # 例如：完整组成是 ['strength', 'en']，问题是 'strength'，那么需点击的就是 'en'。
-                derived_parts_to_click = [p for p in full_word_parts if p != question]
-                # --- END OF FIX ---
-
-                # 检查屏幕上的选项是否包含我们推导出的、真正需要的词缀
-                all_needed_parts_on_screen = all(p in parts for p in derived_parts_to_click)
-
-                if all_needed_parts_on_screen:
-                    candidate = {
-                        "word": "".join(full_word_parts),
-                        # **核心修改**: 使用我们动态推导出的、正确的词缀列表
-                        "parts_to_click": derived_parts_to_click
-                    }
-                    found_answers.append(candidate)
-                    # 为了日志清晰，打印拼接后的单词
-                    print(f"    - [getPutAnswer] 找到候选答案: {candidate['word']}")
-
-            except Exception as e:
-                print(f"    - [getPutAnswer] 发生错误: {e}")
+        build_word_section = self.newDATA.get("构词法", [])
+        all_full_word_parts = build_word_section[2] if len(build_word_section) > 2 and isinstance(build_word_section[2], list) else []
+        for idx in indices:
+            if idx >= len(all_full_word_parts):
                 continue
-        
-        if found_answers:
-            print(f"    - [getPutAnswer] 查找完毕，共找到 {len(found_answers)} 个候选 (总耗时: {time.time() - func_start_time:.4f}s)")
-            return found_answers
-        else:
-            print(f"    - [getPutAnswer] 未找到答案 (总耗时: {time.time() - func_start_time:.4f}s)")
-            return []
 
-    def getChinesetoEnglish(self,question):
-        try:
-            resultList = []
-            indexs = self.find_indexes(self.newDATA["汉译英"][0], question)
-            for i in indexs:
-                resultList.append(self.newDATA["汉译英"][1][i])
-            return resultList
-        except Exception as e:
-            return []
-            
-    def getEnglishtoChinese(self,question):
-        try:
-            resultList = []
-            indexs = self.find_indexes(self.newDATA["英译汉"][0],question)
-            for i in indexs:
-                resultList.append(self.newDATA["英译汉"][1][i])
-            return resultList
-        except Exception as e:
-            return []
+            full_word_parts = all_full_word_parts[idx]
+            if not isinstance(full_word_parts, list):
+                continue
+
+            derived_parts_to_click = [p for p in full_word_parts if p != question]
+            if all(p in parts for p in derived_parts_to_click):
+                candidate = {"word": "".join(full_word_parts), "parts_to_click": derived_parts_to_click}
+                found_answers.append(candidate)
+                self._log(f"    - [getPutAnswer] 找到候选答案: {candidate['word']}")
+
+        if found_answers:
+            self._log(f"    - [getPutAnswer] 查找完毕，共找到 {len(found_answers)} 个候选 (总耗时: {time.time() - func_start_time:.4f}s)")
+            return found_answers
+
+        self._log(f"    - [getPutAnswer] 未找到答案 (总耗时: {time.time() - func_start_time:.4f}s)")
+        return []
+
+    def getChinesetoEnglish(self, question):
+        return self._chinese_to_english_map.get(question, [])
+
+    def getEnglishtoChinese(self, question):
+        return self._english_to_chinese_map.get(question, [])

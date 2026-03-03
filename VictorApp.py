@@ -118,57 +118,64 @@ class U2VictorApp:
         except Exception:
             self.relaxTime = 2.0
 
+    def _expected_count(self, title_name):
+        return 2 if self.lastType == title_name else 1
+
+    def _get_title_counts(self):
+        return {
+            1: self.d(resourceId=self.ID_KEYBOARD).count,
+            7: self.d(resourceId=self.ID_PART_WORD).count,
+            2: self.d(resourceId=self.ID_ENGLISH).count,
+            345: self.d(resourceId=self.ID_QUESTION).count,
+            6: self.d(resourceId=self.ID_SOUND).count,
+        }
+
+    def _get_title_exists(self):
+        return {
+            1: self.d(resourceId=self.ID_KEYBOARD).exists,
+            7: self.d(resourceId=self.ID_PART_WORD).exists,
+            2: self.d(resourceId=self.ID_ENGLISH).exists,
+            345: self.d(resourceId=self.ID_QUESTION).exists,
+            6: self.d(resourceId=self.ID_SOUND).exists,
+        }
+
     def tellTitle(self):
         """ 辨别题型 """
         start_time = time.time()
         
         self.position = self.getPosition()
-        
-        # 使用 count 方法进行快速判断
-        if (self.lastType != '拼写' and self.d(resourceId=self.ID_KEYBOARD).count == 1) or \
-           (self.lastType == '拼写' and self.d(resourceId=self.ID_KEYBOARD).count == 2):
+
+        counts = self._get_title_counts()
+
+        if counts[1] == self._expected_count('拼写'):
             vlog(f"题型: 拼写 | 识别耗时 {time.time() - start_time:.4f}s")
             return 1
 
-        if (self.lastType != '构词法拼词' and self.d(resourceId=self.ID_PART_WORD).count == 1) or \
-           (self.lastType == '构词法拼词' and self.d(resourceId=self.ID_PART_WORD).count == 2):
+        if counts[7] == self._expected_count('构词法拼词'):
             vlog(f"题型: 构词法拼词 | 识别耗时 {time.time() - start_time:.4f}s")
             return 7
 
-        if (self.lastType != '英译汉' and self.d(resourceId=self.ID_ENGLISH).count == 1) or \
-           (self.lastType == '英译汉' and self.d(resourceId=self.ID_ENGLISH).count == 2):
+        if counts[2] == self._expected_count('英译汉'):
             vlog(f"题型: 英译汉 | 识别耗时 {time.time() - start_time:.4f}s")
             return 2
 
-        if (self.lastType != '大杂烩' and self.d(resourceId=self.ID_QUESTION).count == 1) or \
-           (self.lastType == '大杂烩' and self.d(resourceId=self.ID_QUESTION).count == 2):
+        if counts[345] == self._expected_count('大杂烩'):
             vlog(f"题型: 大杂烩 | 识别耗时 {time.time() - start_time:.4f}s")
             return 345
 
-        if (self.lastType != '听音识词' and self.d(resourceId=self.ID_SOUND).count == 1) or \
-           (self.lastType == '听音识词' and self.d(resourceId=self.ID_SOUND).count == 2):
+        if counts[6] == self._expected_count('听音识词'):
             vlog(f"题型: 听音识词 | 识别耗时 {time.time() - start_time:.4f}s")
             return 6
         
         # 增加重试机制，防止因页面加载延迟无法识别
         vlog("初次识别失败，进入重试…")
-        for i in range(5):
+        for _ in range(5):
             time.sleep(0.5)
-            if self.d(resourceId=self.ID_KEYBOARD).exists: 
-                vlog(f"'tellTitle' 重试成功, 总耗时: {time.time() - start_time:.4f} 秒")
-                return 1
-            if self.d(resourceId=self.ID_PART_WORD).exists: 
-                vlog(f"'tellTitle' 重试成功, 总耗时: {time.time() - start_time:.4f} 秒")
-                return 7
-            if self.d(resourceId=self.ID_ENGLISH).exists:
-                vlog(f"'tellTitle' 重试成功, 总耗时: {time.time() - start_time:.4f} 秒")
-                return 2
-            if self.d(resourceId=self.ID_QUESTION).exists:
-                vlog(f"'tellTitle' 重试成功, 总耗时: {time.time() - start_time:.4f} 秒")
-                return 345
-            if self.d(resourceId=self.ID_SOUND).exists:
-                vlog(f"'tellTitle' 重试成功, 总耗时: {time.time() - start_time:.4f} 秒")
-                return 6
+            exists = self._get_title_exists()
+            for mode in (1, 7, 2, 345, 6):
+                if exists[mode]:
+                    vlog(f"'tellTitle' 重试成功, 总耗时: {time.time() - start_time:.4f} 秒")
+                    return mode
             
         raise Exception("无法识别题型，请检查界面。")
 
@@ -192,8 +199,19 @@ class U2VictorApp:
         """ 获得总题数 """
         start_time = time.time()
         title = self.d(resourceId=self.ID_POSITION).get_text()
-        total = int(re.search("/(.+)", title).group(1))
-        current = int(re.search("(.+)/", title).group(1))
+        if not title:
+            raise ValueError("未读取到题号文本")
+
+        title = title.strip()
+        match = re.search(r"(\d+)\s*/\s*(\d+)", title)
+        if not match:
+            raise ValueError(f"无法解析题号文本: {title!r}")
+
+        current = int(match.group(1))
+        total = int(match.group(2))
+        if total < current:
+            raise ValueError(f"题号异常: 当前题号({current})大于总题数({total})")
+
         vlog(f"获取总题数耗时: {time.time() - start_time:.4f} 秒")
         return total - current + 1
 
@@ -278,10 +296,18 @@ class U2VictorApp:
         best_candidate_parts = []
 
         if not candidates:
-            # (这部分逻辑不变)
             if self.llm_helper and self.llm_helper.is_enabled():
-                # ... LLM 逻辑 ...
-                return
+                llm_parts = self.llm_helper.answer_build_word(part_word, parts_on_screen)
+                if llm_parts:
+                    log_ok(f"构词法 (LLM): 点击 {' + '.join(llm_parts)}")
+                    for part_to_click in llm_parts:
+                        for elem in clickable_text_views:
+                            if elem.text == part_to_click:
+                                elem.click()
+                                break
+                    time.sleep(self.relaxTime)
+                    return
+                log_warn("构词法: LLM 未能提供有效答案。")
             log_warn("构词法: 无题库命中，将试错")
             if clickable_text_views:
                 clickable_text_views[randint(0, len(clickable_text_views)-1)].click()
@@ -488,16 +514,18 @@ class U2VictorApp:
         raw_answer_from_db = self.searcher.getListenAnswer(choices_text_list)
         
         if raw_answer_from_db:
-            # 终极修复：移除空白字符，然后移除任何包裹字符串的引号
             answer_from_db = raw_answer_from_db.strip().strip("'\"")
-
-            # 现在进行最干净、最可靠的比较
-            if choice_A.text.strip() == answer_from_db:
-                choice_A.click(); log_ok(f"听音识词: 命中题库 -> {answer_from_db}"); time.sleep(self.relaxTime); return
-            elif choice_B.text.strip() == answer_from_db:
-                choice_B.click(); log_ok(f"听音识词: 命中题库 -> {answer_from_db}"); time.sleep(self.relaxTime); return
-            elif choice_C.text.strip() == answer_from_db:
-                choice_C.click(); log_ok(f"听音识词: 命中题库 -> {answer_from_db}"); time.sleep(self.relaxTime); return
+            choice_candidates = [
+                (choice_A, {choice_A.text.strip(), choices_text_list[0]}),
+                (choice_B, {choice_B.text.strip(), choices_text_list[1]}),
+                (choice_C, {choice_C.text.strip(), choices_text_list[2]}),
+            ]
+            for button, valid_texts in choice_candidates:
+                if answer_from_db in valid_texts:
+                    button.click()
+                    log_ok(f"听音识词: 命中题库 -> {answer_from_db}")
+                    time.sleep(self.relaxTime)
+                    return
 
         log_warn("听音识词: 题库未命中，将随机选择")
         choices = [choice_A, choice_B, choice_C]

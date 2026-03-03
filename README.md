@@ -3,15 +3,13 @@
 
 ## 环境要求
 - Windows 10/11
-- [uv](https://docs.astral.sh/uv/getting-started/installation/)
-- 已安装并可用的 `adb`（Android Platform Tools）
+- `winget`（用于自动安装 `uv` 和 `adb`）
 - Android 设备已开启 USB 调试
 
 ## 快速开始（uv）
 
 ### 方式 A：双击运行（推荐，Windows）
-1. 先安装 uv。
-2. 双击运行 `安装依赖.bat`。
+1. 双击运行 `安装依赖.bat`（会自动安装缺失的 `uv` / `adb`）。
 3. 手机开启 USB 调试并连接电脑，确认 `adb devices` 能看到设备。
 4. 首次使用执行一次初始化：`uv run python -m uiautomator2 init`
 5. 打开手机维词 App 并停在答题页面。
