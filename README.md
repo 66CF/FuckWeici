@@ -36,14 +36,26 @@ winget install --id=astral-sh.uv -e
 ## LLM 配置（可选）
 编辑 `config.py`：
 - `LLM_ENABLED = True/False`：是否启用 LLM 辅助。
+- `LLM_FULL_MODE = True/False`：是否启用全 LLM 辅助模式（调试项，默认关闭；开启后 LLM 优先，题库回退）。
 - `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`：模型服务配置。
+- `LLM_ENABLE_THINKING = True/False`：是否开启模型深度思考（Qwen/Ollama）。
 
 不使用 LLM 时，将 `LLM_ENABLED` 设为 `False` 即可。
+
+### Ollama 全LLM模式推荐配置
+```python
+LLM_ENABLED = True
+LLM_FULL_MODE = True
+LLM_API_KEY = ""
+LLM_BASE_URL = "http://localhost:11434"
+LLM_MODEL = "qwen3.5:4b"
+LLM_ENABLE_THINKING = False
+```
 
 ### Release 版 EXE 如何启用 LLM
 - 首次运行 `FuckWeici.exe` 时，如果目录里没有 `config.py`，程序会自动生成。
 - 打开生成的 `config.py`，填写 `LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL` 后重启 exe。
-- 也可直接用环境变量覆盖：`LLM_ENABLED`、`LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`。
+- 也可直接用环境变量覆盖：`LLM_ENABLED`、`LLM_FULL_MODE`、`LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`、`LLM_ENABLE_THINKING`。
 
 ## 常见问题
 - `uv` 未找到：先安装 uv，或执行 `winget install --id=astral-sh.uv -e`。
@@ -56,7 +68,8 @@ winget install --id=astral-sh.uv -e
 - `SearchResult.py`：本地题库检索。
 - `LLMHelper.py`：LLM 调用封装。
 - `config.py`：LLM 配置。
-- `Data/`：题库数据。
+- `db/weici_ext459.db`：主题库（默认优先加载）。
+- `db` 数据来源（Android）：`/data/data/com.android.weici.senior.student/databases/`
 
 ## 依赖管理说明
 - 项目使用 `uv + pyproject.toml` 管理依赖。

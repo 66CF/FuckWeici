@@ -22,24 +22,38 @@ def log_warn(msg): print(f"{_c('[!]', 'yellow', True)} {msg}")
 
 class LLMHelper:
     def __init__(self, settings):
-        self.enabled = False
         self.api_key = str(settings.get("api_key", "")).strip()
         self.base_url = str(settings.get("base_url", "")).strip().rstrip("/")
         self.model = str(settings.get("model", "")).strip()
+        self.full_mode = bool(settings.get("full_mode", False))
+        self.enable_thinking = bool(settings.get("enable_thinking", False))
+        self.is_ollama = "localhost:11434" in self.base_url.lower() or "127.0.0.1:11434" in self.base_url.lower()
         enabled = bool(settings.get("enabled", False))
-        self.enabled = enabled and bool(self.api_key) and bool(self.base_url) and bool(self.model)
+        key_optional = "localhost" in self.base_url.lower() or "127.0.0.1" in self.base_url.lower()
+        key_ok = bool(self.api_key) or key_optional
+        self.enabled = enabled and key_ok and bool(self.base_url) and bool(self.model)
         
     def is_enabled(self):
         return self.enabled
+
+    def is_full_mode(self):
+        return self.full_mode
+
+    def _chat_completion_endpoint(self):
+        if self.base_url.endswith("/v1"):
+            return f"{self.base_url}/chat/completions"
+        if self.is_ollama:
+            return f"{self.base_url}/v1/chat/completions"
+        return f"{self.base_url}/chat/completions"
 
     def _call_api(self, prompt, system_prompt="You are a helpful assistant."):
         if not self.is_enabled():
             return None
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
         payload = {
             "model": self.model,
             "messages": [
@@ -49,11 +63,15 @@ class LLMHelper:
             "max_tokens": 100,
             "temperature": 0.1
         }
+        if self.is_ollama:
+            # 适配 Qwen/Ollama 的思考开关
+            payload["enable_thinking"] = self.enable_thinking
+            payload["think"] = self.enable_thinking
         
         try:
             log_info("LLM: 正在请求模型获取答案...")
             response = requests.post(
-                f"{self.base_url}/chat/completions",
+                self._chat_completion_endpoint(),
                 headers=headers,
                 data=json.dumps(payload),
                 timeout=15  # 15秒超时
