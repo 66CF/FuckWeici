@@ -8,10 +8,7 @@ from collections import defaultdict
 
 class SearchResult:
     def __init__(self):
-        self.verbose = os.getenv("FW_VERBOSE", "1").strip().lower() in {"1", "true", "yes", "on"}
         self.db_path = os.getenv("FW_DB_PATH", os.path.join("db", "weici_ext459.db"))
-        init_start_time = time.time()
-        self._log("--- SearchResult 初始化 ---")
 
         self.WordCorresponding = {}
         self.newDATA = {}
@@ -21,11 +18,9 @@ class SearchResult:
             )
 
         self._build_indexes()
-        self._log(f"--- 初始化完成 (总耗时: {time.time() - init_start_time:.4f}s) ---")
 
     def _log(self, message):
-        if self.verbose:
-            print(message)
+        return None
 
     def _build_indexes(self):
         self._word_to_indexes = defaultdict(list)
