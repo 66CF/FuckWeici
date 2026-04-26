@@ -1,19 +1,22 @@
 # --- START OF FILE VictorApp.py ---
 
 import re
+import subprocess
 import time
 import difflib
 from pathlib import Path
 from random import randint
 
 import uiautomator2 as u2
-from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
+from rich.rule import Rule
+from rich import box
 from SearchResult import SearchResult
+
+console = Console(force_terminal=True)
 
 QUESTION_TITLES = {
     1: "拼写",
@@ -23,45 +26,120 @@ QUESTION_TITLES = {
     7: "构词法拼词",
 }
 
-console = Console()
-PALETTE = {
-    "primary": "#4DA3FF",
-    "secondary": "#8CC8FF",
-    "muted": "#B7D8FF",
-    "deep": "#163A70",
-    "surface": "#0E2447",
-    "success": "#78C5FF",
-    "warning": "#A8CFFF",
-    "error": "#FF8F8F",
-    "dim": "#7A9BC7",
+STATUS_ICONS = {
+    "ok":    "+",
+    "warn":  "!",
+    "error": "x",
+    "info":  ">",
 }
-STATUS_STYLES = {
-    "ok": f"bold {PALETTE['success']}",
-    "warn": f"bold {PALETTE['warning']}",
-    "error": f"bold {PALETTE['error']}",
-    "info": f"bold {PALETTE['primary']}",
+STATUS_COLORS = {
+    "ok":    "green",
+    "warn":  "yellow",
+    "error": "red",
+    "info":  "cyan",
 }
 STATUS_LABELS = {
-    "ok": "命中",
-    "warn": "兜底",
+    "ok":    "命中",
+    "warn":  "兜底",
     "error": "失败",
-    "info": "提示",
+    "info":  "提示",
 }
+
+
+def _status_badge(status):
+    color = STATUS_COLORS.get(status, "white")
+    label = STATUS_LABELS.get(status, status.upper())
+    icon = STATUS_ICONS.get(status, "")
+    badge = Text()
+    badge.append(icon, style=f"bold {color}")
+    badge.append(" ")
+    badge.append(f"[{label}]", style=f"bold {color}")
+    return badge
 
 
 def format_seconds(value):
     return f"{value:.2f}s"
 
 
-def build_progress_bar(current, total, width=24):
-    if total <= 0:
-        return Text(" " * width, style=PALETTE["dim"])
-    ratio = max(0.0, min(1.0, current / total))
-    filled = round(width * ratio)
-    bar = Text()
-    bar.append("█" * filled, style=PALETTE["primary"])
-    bar.append("░" * (width - filled), style=PALETTE["deep"])
-    return bar
+def show_startup_banner(app):
+    db_path = Path(app.searcher.db_path).resolve()
+    serial = getattr(app.d, "serial", "已连接")
+
+    info_table = Table(show_header=False, box=None, padding=(0, 2), show_edge=False)
+    info_table.add_column("key", style="bold cyan", width=12)
+    info_table.add_column("value", style="white")
+    info_table.add_row("设备", serial)
+    info_table.add_row("题库", str(db_path))
+    info_table.add_row("答题间隔", format_seconds(app.relaxTime))
+    info_table.add_row("包名", app.pkg_name)
+
+    panel = Panel(
+        info_table,
+        title="[bold cyan]FuckWeici[/bold cyan]  [dim]维词自动答题[/dim]",
+        border_style="cyan",
+        box=box.HEAVY,
+        padding=(1, 3),
+    )
+    console.print()
+    console.print(panel)
+
+
+def show_quick_guide():
+    guide = Text.assemble(
+        ("1. ", "bold cyan"),
+        ("先把手机或模拟器切到维词答题界面。\n", "white"),
+        ("2. ", "bold cyan"),
+        ("脚本会自动识别题型并作答。\n", "white"),
+        ("3. ", "bold cyan"),
+        ("遇到无法处理的题，我会提示你手动接管。", "white"),
+    )
+    console.print(Panel(guide, title="[bold cyan]开始前[/bold cyan]", border_style="cyan", box=box.ROUNDED))
+
+
+def show_waiting_hint(message):
+    console.print()
+    console.print(Panel(
+        Text(message, style="white"),
+        title="[bold yellow]等待操作[/bold yellow]",
+        border_style="yellow",
+        box=box.ROUNDED,
+    ))
+
+
+def show_fatal_error(title, detail):
+    console.print()
+    console.print(Panel(
+        Text.assemble((title + "\n\n", "bold red"), (detail, "white")),
+        border_style="red",
+        box=box.HEAVY,
+        padding=(1, 2),
+    ))
+    console.print()
+
+
+def show_question_header(index, total, title):
+    progress_label = f"{index}/{total}" if total else str(index)
+    ratio = index / total if total else 0
+    bar_width = 28
+    filled = max(0, round(bar_width * ratio))
+    bar = "=" * filled + "-" * (bar_width - filled)
+    line = Text.assemble(
+        (f"[{progress_label}]", "bold cyan"),
+        (" ", ""),
+        (bar, "cyan"),
+        (" ", ""),
+        (title, "bold white"),
+    )
+    console.print()
+    console.print(Rule(line, style="cyan", align="left"))
+
+
+def show_question_result(status, summary, detail=None):
+    parts = Text.assemble(_status_badge(status), ("  ", ""), (summary, "white"))
+    if detail:
+        parts.append("  ")
+        parts.append(detail, "dim")
+    console.print(parts)
 
 
 def show_round_summary(
@@ -79,118 +157,40 @@ def show_round_summary(
         if total_questions
         else "0%"
     )
-    summary = Table.grid(padding=(0, 2))
-    summary.add_column(style=f"bold {PALETTE['secondary']}")
-    summary.add_column()
-    summary.add_row("轮次", str(round_index))
-    summary.add_row("总题数", str(total_questions))
-    summary.add_row("完成题数", str(solved_question_count))
-    summary.add_row("人工接管", str(manual_question_count))
-    summary.add_row("自动完成率", auto_rate)
-    summary.add_row("总耗时", format_seconds(total_elapsed_seconds))
-    summary.add_row("平均每题", format_seconds(average_seconds))
+
+    table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2), border_style="cyan")
+    table.add_column("label", style="bold cyan")
+    table.add_column("value", style="white")
+    table.add_column("gap", style="", width=4)
+    table.add_column("label2", style="bold cyan")
+    table.add_column("value2", style="white")
+
+    table.add_row("轮次", str(round_index), "", "自动完成率", auto_rate)
+    table.add_row("总题数", str(total_questions), "", "总耗时", format_seconds(total_elapsed_seconds))
+    table.add_row("完成", str(solved_question_count), "", "平均每题", format_seconds(average_seconds))
+    table.add_row("人工", str(manual_question_count), "", "", "")
+
     console.print()
-    console.print(
-        Panel(
-            summary,
-            title=f"[bold {PALETTE['primary']}]本轮总结[/bold {PALETTE['primary']}]",
-            border_style=PALETTE["primary"],
-            box=box.ROUNDED,
-        )
-    )
+    console.print(Panel(
+        table,
+        title=f"[bold cyan]第 {round_index} 轮总结[/bold cyan]",
+        border_style="cyan",
+        box=box.ROUNDED,
+        padding=(1, 3),
+    ))
 
 
-def show_question_header(index, total, title):
-    progress = f"{index}/{total}" if total else str(index)
-    console.print()
-    progress_line = Text()
-    progress_line.append("进度 ", style=PALETTE["dim"])
-    progress_line.append_text(build_progress_bar(index, total))
-    progress_line.append(f"  {progress}", style=f"bold {PALETTE['secondary']}")
-    console.print(progress_line)
-    header = Text()
-    header.append(title, style=f"bold {PALETTE['primary']}")
-    console.rule(header, style=PALETTE["deep"])
+def print_status(message):
+    console.print(Text.assemble(("  ", ""), (message, "dim")))
 
 
-def show_question_result(status, summary, detail=None):
-    style = STATUS_STYLES.get(status, "bold white")
-    label = STATUS_LABELS.get(status, status.upper())
-    text = Text()
-    text.append(f"{label:<4}", style=style)
-    text.append(summary, style="white")
-    if detail:
-        text.append("  ")
-        text.append(detail, style=PALETTE["dim"])
-    console.print(text)
-
-
-def show_startup_banner(app):
-    db_path = Path(app.searcher.db_path).resolve()
-    info = Table.grid(padding=(0, 2))
-    info.add_column(style=f"bold {PALETTE['secondary']}")
-    info.add_column(style="white")
-    info.add_row("设备", getattr(app.d, "serial", "已连接"))
-    info.add_row("题库", str(db_path))
-    info.add_row("答题间隔", format_seconds(app.relaxTime))
-    info.add_row("包名", app.pkg_name)
-    console.print(
-        Panel(
-            info,
-            title=f"[bold {PALETTE['primary']}]FuckWeici[/bold {PALETTE['primary']}]",
-            subtitle="蓝调控制台",
-            border_style=PALETTE["primary"],
-            box=box.ROUNDED,
-        )
-    )
-
-
-def show_quick_guide():
-    guide = Table.grid(padding=(0, 1))
-    guide.add_column(style=f"bold {PALETTE['secondary']}", width=2)
-    guide.add_column(style="white")
-    guide.add_row("1", "先把手机或模拟器切到维词答题界面。")
-    guide.add_row("2", "脚本会自动识别题型并作答。")
-    guide.add_row("3", "遇到无法处理的题，我会提示你手动接管。")
-    console.print(
-        Panel(
-            guide,
-            title=f"[bold {PALETTE['secondary']}]开始前[/bold {PALETTE['secondary']}]",
-            border_style=PALETTE["deep"],
-            box=box.ROUNDED,
-        )
-    )
-
-
-def show_waiting_hint(message):
-    console.print(
-        Panel(
-            Text(message, style="white"),
-            title=f"[bold {PALETTE['secondary']}]等待操作[/bold {PALETTE['secondary']}]",
-            border_style=PALETTE["deep"],
-            box=box.ROUNDED,
-        )
-    )
-
-
-def show_fatal_error(title, detail):
-    console.print(
-        Panel(
-            Text(detail, style="white"),
-            title=f"[bold red]{title}[/bold red]",
-            border_style="red",
-            box=box.ROUNDED,
-        )
-    )
+def prompt_input(message):
+    return console.input(Text(message, style="bold cyan"))
 
 
 def ask_relax_time(default_value=2.0):
     while True:
-        raw = Prompt.ask(
-            f"[bold {PALETTE['secondary']}]每题操作间隔（秒）[/bold {PALETTE['secondary']}]",
-            default=str(default_value),
-            console=console,
-        ).strip()
+        raw = prompt_input(f"每题操作间隔（秒，默认 {default_value}）").strip() or str(default_value)
         try:
             value = float(raw)
             if value < 0:
@@ -202,9 +202,7 @@ def ask_relax_time(default_value=2.0):
 
 def wait_for_start(total_hint_text):
     while True:
-        command = console.input(
-            f"[bold {PALETTE['secondary']}]准备好后按回车开始，输入 q 退出[/bold {PALETTE['secondary']}] "
-        ).strip().lower()
+        command = prompt_input("准备好后按回车开始，输入 q 退出").strip().lower()
         if command == "q":
             raise SystemExit(0)
         if command:
@@ -219,27 +217,21 @@ def wait_until_quiz_ready(app):
         show_waiting_hint("请把设备停留在答题界面。准备好后回到这里按回车，我会先尝试读取题号。")
         wait_for_start(True)
         try:
-            with console.status(
-                f"[bold {PALETTE['secondary']}]正在读取当前题目状态...[/bold {PALETTE['secondary']}]"
-            ):
-                return app.getTotal()
+            print_status("正在读取当前题目状态...")
+            return app.getTotal()
         except Exception as exc:
             show_question_result("warn", "还没识别到答题页", str(exc))
 
 
 def wait_for_manual_resume(reason):
     show_waiting_hint(f"{reason}\n\n请你在手机上手动完成这一题，然后回到这里按回车继续。")
-    command = console.input(
-        f"[bold {PALETTE['secondary']}]手动处理完成后按回车继续，输入 q 退出[/bold {PALETTE['secondary']}] "
-    ).strip().lower()
+    command = prompt_input("手动处理完成后按回车继续，输入 q 退出").strip().lower()
     if command == "q":
         raise SystemExit(0)
 
 
 def ask_continue_next_round():
-    command = console.input(
-        f"[bold {PALETTE['secondary']}]继续下一轮请按回车，输入 q 结束程序[/bold {PALETTE['secondary']}] "
-    ).strip().lower()
+    command = prompt_input("继续下一轮请按回车，输入 q 结束程序").strip().lower()
     return command != "q"
 
 
@@ -683,28 +675,21 @@ class U2VictorApp:
 if __name__ == "__main__":
     try:
         try:
-            with console.status(
-                f"[bold {PALETTE['secondary']}]正在连接 Android 设备...[/bold {PALETTE['secondary']}]"
-            ):
-                d = u2.connect()
+            print_status("正在连接 Android 设备...")
+            d = u2.connect()
         except Exception as connect_e:
             if "Can't find any android device" in str(connect_e) or "emulator" in str(connect_e):
-                import subprocess
                 subprocess.run(["adb", "kill-server"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
                 time.sleep(1)
                 subprocess.run(["adb", "start-server"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
                 time.sleep(3)
-                with console.status(
-                    f"[bold {PALETTE['secondary']}]正在重启 adb 并重新连接...[/bold {PALETTE['secondary']}]"
-                ):
-                    d = u2.connect()
+                print_status("正在重启 adb 并重新连接...")
+                d = u2.connect()
             else:
                 raise connect_e
         relax_time = ask_relax_time(2.0)
-        with console.status(
-            f"[bold {PALETTE['secondary']}]正在加载题库与索引...[/bold {PALETTE['secondary']}]"
-        ):
-            app = U2VictorApp(d, relax_time=relax_time)
+        print_status("正在加载题库与索引...")
+        app = U2VictorApp(d, relax_time=relax_time)
         show_startup_banner(app)
         show_quick_guide()
     except Exception as exc:
