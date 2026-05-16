@@ -3,9 +3,13 @@ setlocal
 cd /d "%~dp0"
 title VictorApp Launcher
 cls
+set "PATH=%PATH%;%LOCALAPPDATA%\Microsoft\WinGet\Links"
 
 where uv >nul 2>nul
 if errorlevel 1 goto :uv_missing
+
+where gum >nul 2>nul
+if errorlevel 1 goto :gum_missing
 
 set "UV_CACHE_DIR=%~dp0.tmp\uv-cache"
 if not exist "%UV_CACHE_DIR%" mkdir "%UV_CACHE_DIR%" >nul 2>nul
@@ -18,6 +22,11 @@ exit /b 0
 
 :uv_missing
 echo [ERROR] uv not found. Run the dependency installer BAT first.
+pause
+exit /b 1
+
+:gum_missing
+echo [ERROR] gum not found. Run the dependency installer BAT first.
 pause
 exit /b 1
 
