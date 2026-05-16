@@ -1,22 +1,28 @@
-# --- START OF FILE VictorApp.py ---
-
-import re
-import subprocess
-import time
 import difflib
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import time
 from pathlib import Path
 from random import randint
 
 import uiautomator2 as u2
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich.rule import Rule
-from rich import box
 from SearchResult import SearchResult
 
-console = Console(force_terminal=True)
+GUM = shutil.which("gum")
+
+GUM_COLORS = {
+    "accent": "#7DD3FC",
+    "muted": "#94A3B8",
+    "ok": "#22C55E",
+    "warn": "#F59E0B",
+    "error": "#EF4444",
+    "info": "#38BDF8",
+}
 
 QUESTION_TITLES = {
     1: "拼写",
@@ -26,35 +32,137 @@ QUESTION_TITLES = {
     7: "构词法拼词",
 }
 
-STATUS_ICONS = {
-    "ok":    "+",
-    "warn":  "!",
-    "error": "x",
-    "info":  ">",
-}
-STATUS_COLORS = {
-    "ok":    "green",
-    "warn":  "yellow",
-    "error": "red",
-    "info":  "cyan",
-}
 STATUS_LABELS = {
     "ok":    "命中",
     "warn":  "兜底",
     "error": "失败",
     "info":  "提示",
 }
+STATUS_LOG_LEVELS = {
+    "ok": "info",
+    "warn": "warn",
+    "error": "error",
+    "info": "info",
+}
+RELAX_TIME_CHOICES = ("0.5 秒", "1 秒", "2 秒", "3 秒", "5 秒", "自定义")
 
 
-def _status_badge(status):
-    color = STATUS_COLORS.get(status, "white")
-    label = STATUS_LABELS.get(status, status.upper())
-    icon = STATUS_ICONS.get(status, "")
-    badge = Text()
-    badge.append(icon, style=f"bold {color}")
-    badge.append(" ")
-    badge.append(f"[{label}]", style=f"bold {color}")
-    return badge
+def _run_gum(args, input_text=None, capture_output=False):
+    if not GUM:
+        return None
+    try:
+        return subprocess.run(
+            [GUM, *args],
+            input=input_text,
+            stdout=subprocess.PIPE if capture_output else None,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except (OSError, ValueError):
+        return None
+
+
+def _gum_interactive():
+    return bool(GUM and sys.stdin.isatty())
+
+
+def _compact_log_text(value):
+    return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def _gum_log(level, message, *, prefix=None):
+    message = _compact_log_text(message)
+    args = ["log", "--level", level]
+    if prefix:
+        args.extend(["--prefix", prefix])
+
+    completed = _run_gum(args + [message])
+    if completed is None or completed.returncode != 0:
+        label = level.upper()
+        prefix_text = f" {prefix}:" if prefix else ""
+        print(f"{label}{prefix_text} {message}")
+
+
+def _run_with_spinner(title, func):
+    if not _gum_interactive():
+        return func()
+
+    fd, marker_name = tempfile.mkstemp(prefix="fw-gum-spin-", suffix=".done")
+    os.close(fd)
+    marker = Path(marker_name)
+    marker.unlink(missing_ok=True)
+    result = {}
+
+    def runner():
+        try:
+            result["value"] = func()
+        except BaseException as exc:
+            result["error"] = exc
+        finally:
+            try:
+                marker.touch(exist_ok=True)
+            except OSError:
+                pass
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    wait_script = (
+        "import pathlib,time\n"
+        f"marker = pathlib.Path({str(marker)!r})\n"
+        "while not marker.exists():\n"
+        "    time.sleep(0.1)\n"
+    )
+    _run_gum([
+        "spin",
+        "--spinner",
+        "dot",
+        "--title",
+        title,
+        "--spinner.foreground",
+        GUM_COLORS["accent"],
+        "--title.foreground",
+        GUM_COLORS["muted"],
+        "--",
+        sys.executable,
+        "-c",
+        wait_script,
+    ])
+    thread.join()
+    marker.unlink(missing_ok=True)
+
+    if "error" in result:
+        raise result["error"]
+    return result.get("value")
+
+
+def _gum_confirm(message, *, affirmative="继续", negative="退出", default=True):
+    if _gum_interactive():
+        args = [
+            "confirm",
+            message,
+            "--affirmative",
+            affirmative,
+            "--negative",
+            negative,
+            "--prompt.foreground",
+            GUM_COLORS["accent"],
+            "--selected.background",
+            GUM_COLORS["accent"],
+            "--selected.foreground",
+            "#0F172A",
+            "--unselected.foreground",
+            "#CBD5E1",
+        ]
+        if default:
+            args.append("--default")
+        completed = _run_gum(args)
+        if completed is not None:
+            return completed.returncode == 0
+
+    raw = prompt_input(f"{message}（回车={affirmative}，q={negative}）").strip().lower()
+    return raw != "q"
 
 
 def format_seconds(value):
@@ -64,82 +172,35 @@ def format_seconds(value):
 def show_startup_banner(app):
     db_path = Path(app.searcher.db_path).resolve()
     serial = getattr(app.d, "serial", "已连接")
-
-    info_table = Table(show_header=False, box=None, padding=(0, 2), show_edge=False)
-    info_table.add_column("key", style="bold cyan", width=12)
-    info_table.add_column("value", style="white")
-    info_table.add_row("设备", serial)
-    info_table.add_row("题库", str(db_path))
-    info_table.add_row("答题间隔", format_seconds(app.relaxTime))
-    info_table.add_row("包名", app.pkg_name)
-
-    panel = Panel(
-        info_table,
-        title="[bold cyan]FuckWeici[/bold cyan]  [dim]维词自动答题[/dim]",
-        border_style="cyan",
-        box=box.HEAVY,
-        padding=(1, 3),
-    )
-    console.print()
-    console.print(panel)
+    _gum_log("info", "FuckWeici 已启动", prefix="启动")
+    _gum_log("info", f"设备={serial}", prefix="环境")
+    _gum_log("info", f"题库={db_path}", prefix="环境")
+    _gum_log("info", f"答题间隔={format_seconds(app.relaxTime)} 包名={app.pkg_name}", prefix="环境")
 
 
 def show_quick_guide():
-    guide = Text.assemble(
-        ("1. ", "bold cyan"),
-        ("先把手机或模拟器切到维词答题界面。\n", "white"),
-        ("2. ", "bold cyan"),
-        ("脚本会自动识别题型并作答。\n", "white"),
-        ("3. ", "bold cyan"),
-        ("遇到无法处理的题，我会提示你手动接管。", "white"),
-    )
-    console.print(Panel(guide, title="[bold cyan]开始前[/bold cyan]", border_style="cyan", box=box.ROUNDED))
+    _gum_log("info", "进入维词答题界面后确认开始；无法处理的题会提示手动接管。", prefix="提示")
 
 
 def show_waiting_hint(message):
-    console.print()
-    console.print(Panel(
-        Text(message, style="white"),
-        title="[bold yellow]等待操作[/bold yellow]",
-        border_style="yellow",
-        box=box.ROUNDED,
-    ))
+    _gum_log("warn", message, prefix="等待")
 
 
 def show_fatal_error(title, detail):
-    console.print()
-    console.print(Panel(
-        Text.assemble((title + "\n\n", "bold red"), (detail, "white")),
-        border_style="red",
-        box=box.HEAVY,
-        padding=(1, 2),
-    ))
-    console.print()
+    _gum_log("error", f"{title}: {detail}", prefix="错误")
 
 
 def show_question_header(index, total, title):
     progress_label = f"{index}/{total}" if total else str(index)
-    ratio = index / total if total else 0
-    bar_width = 28
-    filled = max(0, round(bar_width * ratio))
-    bar = "=" * filled + "-" * (bar_width - filled)
-    line = Text.assemble(
-        (f"[{progress_label}]", "bold cyan"),
-        (" ", ""),
-        (bar, "cyan"),
-        (" ", ""),
-        (title, "bold white"),
-    )
-    console.print()
-    console.print(Rule(line, style="cyan", align="left"))
+    _gum_log("info", f"{progress_label} {title}", prefix="题目")
 
 
 def show_question_result(status, summary, detail=None):
-    parts = Text.assemble(_status_badge(status), ("  ", ""), (summary, "white"))
+    label = STATUS_LABELS.get(status, status.upper())
+    line = str(summary)
     if detail:
-        parts.append("  ")
-        parts.append(detail, "dim")
-    console.print(parts)
+        line += f" · {detail}"
+    _gum_log(STATUS_LOG_LEVELS.get(status, "info"), line, prefix=label)
 
 
 def show_round_summary(
@@ -158,39 +219,95 @@ def show_round_summary(
         else "0%"
     )
 
-    table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2), border_style="cyan")
-    table.add_column("label", style="bold cyan")
-    table.add_column("value", style="white")
-    table.add_column("gap", style="", width=4)
-    table.add_column("label2", style="bold cyan")
-    table.add_column("value2", style="white")
-
-    table.add_row("轮次", str(round_index), "", "自动完成率", auto_rate)
-    table.add_row("总题数", str(total_questions), "", "总耗时", format_seconds(total_elapsed_seconds))
-    table.add_row("完成", str(solved_question_count), "", "平均每题", format_seconds(average_seconds))
-    table.add_row("人工", str(manual_question_count), "", "", "")
-
-    console.print()
-    console.print(Panel(
-        table,
-        title=f"[bold cyan]第 {round_index} 轮总结[/bold cyan]",
-        border_style="cyan",
-        box=box.ROUNDED,
-        padding=(1, 3),
-    ))
+    _gum_log(
+        "info",
+        (
+            f"第 {round_index} 轮 总题数={total_questions} 完成={solved_question_count} "
+            f"人工={manual_question_count} 自动完成率={auto_rate} "
+            f"总耗时={format_seconds(total_elapsed_seconds)} 平均每题={format_seconds(average_seconds)}"
+        ),
+        prefix="总结",
+    )
 
 
 def print_status(message):
-    console.print(Text.assemble(("  ", ""), (message, "dim")))
+    _gum_log("info", message, prefix="状态")
 
 
-def prompt_input(message):
-    return console.input(Text(message, style="bold cyan"))
+def prompt_input(message, placeholder=""):
+    if _gum_interactive():
+        args = [
+            "input",
+            "--prompt",
+            f"{message}: ",
+            "--placeholder",
+            placeholder,
+            "--prompt.foreground",
+            GUM_COLORS["accent"],
+            "--cursor.foreground",
+            GUM_COLORS["accent"],
+        ]
+        completed = _run_gum(args, capture_output=True)
+        if completed is not None and completed.returncode == 0:
+            return completed.stdout.rstrip("\r\n")
+        if completed is not None:
+            return ""
+
+    try:
+        return input(f"{message}: ")
+    except EOFError:
+        return ""
+
+
+def _parse_relax_time_choice(choice):
+    match = re.search(r"\d+(?:\.\d+)?", str(choice or ""))
+    if not match:
+        return None
+    return float(match.group())
 
 
 def ask_relax_time(default_value=2.0):
+    selected_choice = "2 秒"
+    if default_value == 0.5:
+        selected_choice = "0.5 秒"
+    elif default_value in (1, 2, 3, 5):
+        selected_choice = f"{int(default_value)} 秒"
+
+    if _gum_interactive():
+        completed = _run_gum(
+            [
+                "choose",
+                *RELAX_TIME_CHOICES,
+                "--header",
+                "每题操作间隔",
+                "--height",
+                str(len(RELAX_TIME_CHOICES)),
+                "--selected",
+                selected_choice,
+                "--cursor.foreground",
+                GUM_COLORS["accent"],
+                "--selected.foreground",
+                GUM_COLORS["accent"],
+                "--header.foreground",
+                GUM_COLORS["muted"],
+            ],
+            capture_output=True,
+        )
+        if completed is not None and completed.returncode == 0:
+            choice = completed.stdout.strip()
+            if choice != "自定义":
+                parsed = _parse_relax_time_choice(choice)
+                if parsed is not None:
+                    return parsed
+
+    if not sys.stdin.isatty():
+        return default_value
+
     while True:
-        raw = prompt_input(f"每题操作间隔（秒，默认 {default_value}）").strip() or str(default_value)
+        raw = (
+            prompt_input(f"自定义每题操作间隔（秒，默认 {default_value}）", str(default_value)).strip()
+            or str(default_value)
+        )
         try:
             value = float(raw)
             if value < 0:
@@ -200,16 +317,11 @@ def ask_relax_time(default_value=2.0):
             show_question_result("warn", "输入无效", "请输入大于等于 0 的数字")
 
 
-def wait_for_start(total_hint_text):
+def wait_for_start(_total_hint_text):
     while True:
-        command = prompt_input("准备好后按回车开始，输入 q 退出").strip().lower()
-        if command == "q":
+        if not _gum_confirm("准备好开始了吗？", affirmative="开始", negative="退出"):
             raise SystemExit(0)
-        if command:
-            show_question_result("info", "已忽略额外输入", "直接回车即可开始")
-            continue
-        if total_hint_text:
-            return
+        return
 
 
 def wait_until_quiz_ready(app):
@@ -225,14 +337,12 @@ def wait_until_quiz_ready(app):
 
 def wait_for_manual_resume(reason):
     show_waiting_hint(f"{reason}\n\n请你在手机上手动完成这一题，然后回到这里按回车继续。")
-    command = prompt_input("手动处理完成后按回车继续，输入 q 退出").strip().lower()
-    if command == "q":
+    if not _gum_confirm("手动处理完成了吗？", affirmative="继续", negative="退出"):
         raise SystemExit(0)
 
 
 def ask_continue_next_round():
-    command = prompt_input("继续下一轮请按回车，输入 q 结束程序").strip().lower()
-    return command != "q"
+    return _gum_confirm("继续下一轮？", affirmative="继续", negative="结束")
 
 
 class U2VictorApp:
@@ -674,22 +784,25 @@ class U2VictorApp:
 
 if __name__ == "__main__":
     try:
-        try:
-            print_status("正在连接 Android 设备...")
-            d = u2.connect()
-        except Exception as connect_e:
-            if "Can't find any android device" in str(connect_e) or "emulator" in str(connect_e):
-                subprocess.run(["adb", "kill-server"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-                time.sleep(1)
-                subprocess.run(["adb", "start-server"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-                time.sleep(3)
-                print_status("正在重启 adb 并重新连接...")
-                d = u2.connect()
-            else:
-                raise connect_e
         relax_time = ask_relax_time(2.0)
-        print_status("正在加载题库与索引...")
-        app = U2VictorApp(d, relax_time=relax_time)
+
+        def connect_device():
+            try:
+                return u2.connect()
+            except Exception as connect_e:
+                if "Can't find any android device" in str(connect_e) or "emulator" in str(connect_e):
+                    subprocess.run(["adb", "kill-server"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                    time.sleep(1)
+                    subprocess.run(["adb", "start-server"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+                    time.sleep(3)
+                    return u2.connect()
+                raise connect_e
+
+        d = _run_with_spinner("初始化：连接 Android 设备", connect_device)
+        app = _run_with_spinner(
+            "初始化：加载题库与索引",
+            lambda: U2VictorApp(d, relax_time=relax_time),
+        )
         show_startup_banner(app)
         show_quick_guide()
     except Exception as exc:

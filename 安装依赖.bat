@@ -46,6 +46,24 @@ if errorlevel 1 (
     )
 )
 
+where gum >nul 2>nul
+if errorlevel 1 (
+    echo [INFO] gum not found, trying to install via winget...
+    where winget >nul 2>nul
+    if errorlevel 1 (
+        echo [ERROR] winget not found. Please install gum manually.
+        pause
+        exit /b 1
+    )
+
+    winget install --id=charmbracelet.gum -e --accept-package-agreements --accept-source-agreements
+    if errorlevel 1 (
+        echo [ERROR] Failed to install gum automatically.
+        pause
+        exit /b 1
+    )
+)
+
 echo [INFO] Running uv sync with CN mirror...
 uv sync
 if errorlevel 1 (
