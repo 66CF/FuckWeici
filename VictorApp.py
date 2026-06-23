@@ -18,10 +18,6 @@ GUM = shutil.which("gum")
 GUM_COLORS = {
     "accent": "#7DD3FC",
     "muted": "#94A3B8",
-    "ok": "#22C55E",
-    "warn": "#F59E0B",
-    "error": "#EF4444",
-    "info": "#38BDF8",
 }
 
 QUESTION_TITLES = {
@@ -32,17 +28,11 @@ QUESTION_TITLES = {
     7: "构词法拼词",
 }
 
-STATUS_LABELS = {
-    "ok":    "命中",
-    "warn":  "兜底",
-    "error": "失败",
-    "info":  "提示",
-}
-STATUS_LOG_LEVELS = {
-    "ok": "info",
-    "warn": "warn",
-    "error": "error",
-    "info": "info",
+STATUS = {
+    "ok":    ("命中", "info"),
+    "warn":  ("兜底", "warn"),
+    "error": ("失败", "error"),
+    "info":  ("提示", "info"),
 }
 RELAX_TIME_CHOICES = ("0.5 秒", "1 秒", "2 秒", "3 秒", "5 秒", "自定义")
 
@@ -68,12 +58,8 @@ def _gum_interactive():
     return bool(GUM and sys.stdin.isatty())
 
 
-def _compact_log_text(value):
-    return re.sub(r"\s+", " ", str(value or "")).strip()
-
-
 def _gum_log(level, message, *, prefix=None):
-    message = _compact_log_text(message)
+    message = re.sub(r"\s+", " ", str(message or "")).strip()
     args = ["log", "--level", level]
     if prefix:
         args.extend(["--prefix", prefix])
@@ -165,75 +151,6 @@ def _gum_confirm(message, *, affirmative="继续", negative="退出", default=Tr
     return raw != "q"
 
 
-def format_seconds(value):
-    return f"{value:.2f}s"
-
-
-def show_startup_banner(app):
-    db_path = Path(app.searcher.db_path).resolve()
-    serial = getattr(app.d, "serial", "已连接")
-    _gum_log("info", "FuckWeici 已启动", prefix="启动")
-    _gum_log("info", f"设备={serial}", prefix="环境")
-    _gum_log("info", f"题库={db_path}", prefix="环境")
-    _gum_log("info", f"答题间隔={format_seconds(app.relaxTime)} 包名={app.pkg_name}", prefix="环境")
-
-
-def show_quick_guide():
-    _gum_log("info", "进入维词答题界面后确认开始；无法处理的题会提示手动接管。", prefix="提示")
-
-
-def show_waiting_hint(message):
-    _gum_log("warn", message, prefix="等待")
-
-
-def show_fatal_error(title, detail):
-    _gum_log("error", f"{title}: {detail}", prefix="错误")
-
-
-def show_question_header(index, total, title):
-    progress_label = f"{index}/{total}" if total else str(index)
-    _gum_log("info", f"{progress_label} {title}", prefix="题目")
-
-
-def show_question_result(status, summary, detail=None):
-    label = STATUS_LABELS.get(status, status.upper())
-    line = str(summary)
-    if detail:
-        line += f" · {detail}"
-    _gum_log(STATUS_LOG_LEVELS.get(status, "info"), line, prefix=label)
-
-
-def show_round_summary(
-    round_index,
-    total_questions,
-    solved_question_count,
-    manual_question_count,
-    total_elapsed_seconds,
-):
-    average_seconds = (
-        total_elapsed_seconds / solved_question_count if solved_question_count else 0.0
-    )
-    auto_rate = (
-        f"{(solved_question_count / total_questions) * 100:.0f}%"
-        if total_questions
-        else "0%"
-    )
-
-    _gum_log(
-        "info",
-        (
-            f"第 {round_index} 轮 总题数={total_questions} 完成={solved_question_count} "
-            f"人工={manual_question_count} 自动完成率={auto_rate} "
-            f"总耗时={format_seconds(total_elapsed_seconds)} 平均每题={format_seconds(average_seconds)}"
-        ),
-        prefix="总结",
-    )
-
-
-def print_status(message):
-    _gum_log("info", message, prefix="状态")
-
-
 def prompt_input(message, placeholder=""):
     if _gum_interactive():
         args = [
@@ -257,13 +174,6 @@ def prompt_input(message, placeholder=""):
         return input(f"{message}: ")
     except EOFError:
         return ""
-
-
-def _parse_relax_time_choice(choice):
-    match = re.search(r"\d+(?:\.\d+)?", str(choice or ""))
-    if not match:
-        return None
-    return float(match.group())
 
 
 def ask_relax_time(default_value=2.0):
@@ -296,9 +206,9 @@ def ask_relax_time(default_value=2.0):
         if completed is not None and completed.returncode == 0:
             choice = completed.stdout.strip()
             if choice != "自定义":
-                parsed = _parse_relax_time_choice(choice)
-                if parsed is not None:
-                    return parsed
+                match = re.search(r"\d+(?:\.\d+)?", choice)
+                if match:
+                    return float(match.group())
 
     if not sys.stdin.isatty():
         return default_value
@@ -314,7 +224,8 @@ def ask_relax_time(default_value=2.0):
                 raise ValueError
             return value
         except ValueError:
-            show_question_result("warn", "输入无效", "请输入大于等于 0 的数字")
+            label, level = STATUS.get("warn", ("兜底", "warn"))
+            _gum_log(level, "输入无效 · 请输入大于等于 0 的数字", prefix=label)
 
 
 def wait_for_start(_total_hint_text):
@@ -326,17 +237,18 @@ def wait_for_start(_total_hint_text):
 
 def wait_until_quiz_ready(app):
     while True:
-        show_waiting_hint("请把设备停留在答题界面。准备好后回到这里按回车，我会先尝试读取题号。")
+        _gum_log("warn", "请把设备停留在答题界面。准备好后回到这里按回车，我会先尝试读取题号。", prefix="等待")
         wait_for_start(True)
         try:
-            print_status("正在读取当前题目状态...")
+            _gum_log("info", "正在读取当前题目状态...", prefix="状态")
             return app.getTotal()
         except Exception as exc:
-            show_question_result("warn", "还没识别到答题页", str(exc))
+            label, level = STATUS.get("warn", ("兜底", "warn"))
+            _gum_log(level, f"还没识别到答题页 · {exc}", prefix=label)
 
 
 def wait_for_manual_resume(reason):
-    show_waiting_hint(f"{reason}\n\n请你在手机上手动完成这一题，然后回到这里按回车继续。")
+    _gum_log("warn", f"{reason}\n\n请你在手机上手动完成这一题，然后回到这里按回车继续。", prefix="等待")
     if not _gum_confirm("手动处理完成了吗？", affirmative="继续", negative="退出"):
         raise SystemExit(0)
 
@@ -373,15 +285,14 @@ class U2VictorApp:
         self.is_king_mode = False
         self.position = 1
         self.runTime = 0
-        self.current_question_index = 0
-        self.current_total_questions = 0
         self.relaxTime = relax_time if relax_time >= 0 else 2.0
 
     def report(self, status, summary, detail=None):
-        show_question_result(status, summary, detail)
-
-    def _expected_count(self, title_name):
-        return 2 if self.lastType == title_name else 1
+        label, level = STATUS.get(status, (status.upper(), "info"))
+        line = str(summary)
+        if detail:
+            line += f" · {detail}"
+        _gum_log(level, line, prefix=label)
 
     def _get_title_counts(self):
         return {
@@ -407,19 +318,19 @@ class U2VictorApp:
 
         counts = self._get_title_counts()
 
-        if counts[1] == self._expected_count('拼写'):
+        if counts[1] == (2 if self.lastType == '拼写' else 1):
             return 1
 
-        if counts[7] == self._expected_count('构词法拼词'):
+        if counts[7] == (2 if self.lastType == '构词法拼词' else 1):
             return 7
 
-        if counts[2] == self._expected_count('英译汉'):
+        if counts[2] == (2 if self.lastType == '英译汉' else 1):
             return 2
 
-        if counts[345] == self._expected_count('大杂烩'):
+        if counts[345] == (2 if self.lastType == '大杂烩' else 1):
             return 345
 
-        if counts[6] == self._expected_count('听音识词'):
+        if counts[6] == (2 if self.lastType == '听音识词' else 1):
             return 6
         
         # 增加重试机制，防止因页面加载延迟无法识别
@@ -460,7 +371,6 @@ class U2VictorApp:
 
     def getTotal(self):
         """ 获得总题数 """
-        start_time = time.time()
         title = self.d(resourceId=self.ID_POSITION).get_text()
         if not title:
             raise ValueError("未读取到题号文本")
@@ -546,7 +456,7 @@ class U2VictorApp:
         parts_on_screen = [elem.text for elem in clickable_text_views]
         
         # candidates 现在是这样的列表: [{'word': 'organise', 'parts_to_click': ['ise']}, ...]
-        candidates = self.searcher.getPutAnswer(part_word, parts_on_screen, self.position)
+        candidates = self.searcher.getPutAnswer(part_word, parts_on_screen)
         
         best_candidate_parts = []
 
@@ -803,13 +713,13 @@ if __name__ == "__main__":
             "初始化：加载题库与索引",
             lambda: U2VictorApp(d, relax_time=relax_time),
         )
-        show_startup_banner(app)
-        show_quick_guide()
+        _gum_log("info", "FuckWeici 已启动", prefix="启动")
+        _gum_log("info", f"设备={getattr(app.d, 'serial', '已连接')}", prefix="环境")
+        _gum_log("info", f"题库={Path(app.searcher.db_path).resolve()}", prefix="环境")
+        _gum_log("info", f"答题间隔={app.relaxTime:.2f}s 包名={app.pkg_name}", prefix="环境")
+        _gum_log("info", "进入维词答题界面后确认开始；无法处理的题会提示手动接管。", prefix="提示")
     except Exception as exc:
-        show_fatal_error(
-            "启动失败",
-            f"{exc}\n\n请先确认 adb 已连接设备，且题库文件可以正常读取。",
-        )
+        _gum_log("error", f"启动失败: {exc}\n\n请先确认 adb 已连接设备，且题库文件可以正常读取。", prefix="错误")
         raise SystemExit(1)
 
     try:
@@ -820,16 +730,11 @@ if __name__ == "__main__":
             total_elapsed_seconds = 0.0
 
             for i in range(total_questions):
-                app.current_question_index = i + 1
-                app.current_total_questions = total_questions
                 question_start_time = time.time()
                 try:
                     title_type = app.tellTitle()
-                    show_question_header(
-                        i + 1,
-                        total_questions,
-                        QUESTION_TITLES.get(title_type, "识别成功"),
-                    )
+                    progress_label = f"{i + 1}/{total_questions}" if total_questions else str(i + 1)
+                    _gum_log("info", f"{progress_label} {QUESTION_TITLES.get(title_type, '识别成功')}", prefix="题目")
                     app.solveTitle(title_type)
                     question_elapsed = time.time() - question_start_time
                     solved_question_count += 1
@@ -837,23 +742,27 @@ if __name__ == "__main__":
                 except Exception as exc:
                     manual_question_count += 1
                     if "万词王模式人工介入" in str(exc):
-                        show_question_result("warn", "需要人工接管", str(exc))
+                        label, level = STATUS.get("warn", ("兜底", "warn"))
+                        _gum_log(level, f"需要人工接管 · {exc}", prefix=label)
                     else:
-                        show_question_result("error", "本题未能自动完成", str(exc))
+                        label, level = STATUS.get("error", ("失败", "error"))
+                        _gum_log(level, f"本题未能自动完成 · {exc}", prefix=label)
                     wait_for_manual_resume("这一题脚本没有顺利完成。")
 
             app.runTime += 1
             app.lastType = ''
-            show_round_summary(
-                app.runTime,
-                total_questions,
-                solved_question_count,
-                manual_question_count,
-                total_elapsed_seconds,
+            average_seconds = total_elapsed_seconds / solved_question_count if solved_question_count else 0.0
+            auto_rate = f"{(solved_question_count / total_questions) * 100:.0f}%" if total_questions else "0%"
+            _gum_log(
+                "info",
+                f"第 {app.runTime} 轮 总题数={total_questions} 完成={solved_question_count} "
+                f"人工={manual_question_count} 自动完成率={auto_rate} "
+                f"总耗时={total_elapsed_seconds:.2f}s 平均每题={average_seconds:.2f}s",
+                prefix="总结",
             )
             if not ask_continue_next_round():
                 break
     except Exception as exc:
-        show_fatal_error("运行中断", str(exc) or "出现未知错误")
+        _gum_log("error", f"运行中断: {str(exc) or '出现未知错误'}", prefix="错误")
         raise SystemExit(1)
 # --- END OF FILE VictorApp.py ---
