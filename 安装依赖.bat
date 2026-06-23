@@ -44,7 +44,39 @@ if errorlevel 1 (
             exit /b 1
         )
     )
+
+    for /f "delims=" %%D in ('dir /s /b "%LOCALAPPDATA%\Microsoft\WinGet\Packages\*adb.exe" 2^>nul') do (
+        set "ADB_DIR=%%~dpD"
+        goto :found_adb
+    )
+    goto :adb_not_found_in_path
+
+    :found_adb
+    set "PATH=%PATH%;%ADB_DIR%"
+    echo [INFO] adb found at: %ADB_DIR%
+
+    echo %PATH% | findstr /I /C:"%ADB_DIR%" >nul 2>nul
+    if errorlevel 1 (
+        for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USER_PATH=%%B"
+        echo %USER_PATH% | findstr /I /C:"%ADB_DIR%" >nul 2>nul
+        if errorlevel 1 (
+            setx Path "%USER_PATH%;%ADB_DIR%"
+            echo [INFO] adb path added to user PATH permanently.
+        )
+    )
+
+    where adb >nul 2>nul
+    if errorlevel 1 (
+        goto :adb_not_found_in_path
+    )
+    goto :adb_done
+
+    :adb_not_found_in_path
+    echo [WARN] adb installed but not in PATH. You may need to restart your terminal.
+    echo        If adb still doesn't work, add this to your system PATH:
+    echo        %LOCALAPPDATA%\Microsoft\WinGet\Packages\Google.PlatformTools_Microsoft.Winget.Source_8wekyb3d8bbwe\platform-tools
 )
+:adb_done
 
 where gum >nul 2>nul
 if errorlevel 1 (
