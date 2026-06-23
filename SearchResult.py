@@ -2,7 +2,6 @@ import json
 import os
 import re
 import sqlite3
-import time
 from collections import defaultdict
 
 
@@ -18,9 +17,6 @@ class SearchResult:
             )
 
         self._build_indexes()
-
-    def _log(self, message):
-        return None
 
     def _build_indexes(self):
         self._word_to_indexes = defaultdict(list)
@@ -42,10 +38,6 @@ class SearchResult:
 
     def _normalize_question_text(self, text):
         return "".join(re.findall(r"[a-zA-Z\u4e00-\u9fa5]+", str(text or "")))
-
-    def _format_answer(self, answer):
-        normalized = str(answer or "").strip().strip("'\"")
-        return f"'{normalized}'" if normalized else ""
 
     def _strip_choice_prefix(self, choice):
         return re.sub(r"^[A-D]\.\s*", "", str(choice or "").strip())
@@ -80,7 +72,8 @@ class SearchResult:
         ).fetchall()
         for questions, subject, answer, answer_a, answer_b, answer_c, spell_word in rows:
             q_type = int(questions or 0)
-            normalized_answer = self._format_answer(answer)
+            normalized_answer = self._normalize_choice(answer)
+            normalized_answer = f"'{normalized_answer}'" if normalized_answer else ""
             if q_type == 1:
                 subject_word = str(subject or "").strip()
                 answer_word = self._normalize_choice(answer)
@@ -134,20 +127,15 @@ class SearchResult:
 
     def _load_from_db(self):
         if not os.path.exists(self.db_path):
-            self._log(f"  - [DB] 未找到数据库: {self.db_path}")
             return False
-        db_start_time = time.time()
         try:
             with sqlite3.connect(self.db_path) as conn:
                 self.WordCorresponding = self._build_word_corresponding_from_db(conn)
                 self.newDATA = self._build_new_data_from_db(conn)
             if not self.WordCorresponding.get("words") or not self.newDATA.get("语境题", [[], []])[0]:
-                self._log("  - [DB] 数据为空或结构异常")
                 return False
-            self._log(f"  - [DB] 题库加载完毕 ({time.time() - db_start_time:.4f}s) -> {self.db_path}")
             return True
-        except (sqlite3.Error, OSError) as exc:
-            self._log(f"  - [DB] 加载失败: {exc}")
+        except (sqlite3.Error, OSError):
             return False
 
     def _build_question_answer_map(self, key):
@@ -247,7 +235,7 @@ class SearchResult:
         answers = section[1] if isinstance(section[1], list) else []
         answer_map = {}
 
-        for raw in answers:
+        def _register(raw):
             normalized = self._normalize_spelling_word(raw)
             cleaned = re.sub(r"[^A-Za-z]", "", str(raw or "").strip())
             if normalized and normalized not in answer_map:
@@ -256,14 +244,10 @@ class SearchResult:
             if cleaned_norm and cleaned_norm not in answer_map:
                 answer_map[cleaned_norm] = cleaned
 
+        for raw in answers:
+            _register(raw)
         for raw in subjects:
-            normalized = self._normalize_spelling_word(raw)
-            cleaned = re.sub(r"[^A-Za-z]", "", str(raw or "").strip())
-            if normalized and normalized not in answer_map:
-                answer_map[normalized] = str(raw).strip()
-            cleaned_norm = self._normalize_spelling_word(cleaned)
-            if cleaned_norm and cleaned_norm not in answer_map:
-                answer_map[cleaned_norm] = cleaned
+            _register(raw)
         return answer_map
 
     def generateWordCorresponding(self, data):
@@ -307,14 +291,6 @@ class SearchResult:
         """ 从音标搜找单词 """
         return [self.WordCorresponding["words"][i] for i in self._note_to_indexes.get(note, [])]
 
-    def partSearchWord(self, wholeWord, part):
-        """ 从整个单词和词性找单词 """
-        for word in wholeWord:
-            for idx in self._word_to_indexes.get(word, []):
-                if part == self.WordCorresponding["parts"][idx]:
-                    return word
-        return None
-
     def getMeanFromWord(self, word):
         """ 找单词意思 """
         if word in self._mean_cache:
@@ -331,10 +307,6 @@ class SearchResult:
 
         self._mean_cache[word] = mean_list
         return mean_list
-
-    def indexListMore(self, input_list, element):
-        """ 返回 下标 """
-        return [i for i, x in enumerate(input_list) if x == element]
 
     def getLongAnswer(self, question):
         return self._query_answers(self._long_answer_map, question)
@@ -364,15 +336,10 @@ class SearchResult:
                 return cleaned
         return str(word or "").strip()
 
-    def find_indexes(self, input_list, element):
-        return [i for i, value in enumerate(input_list) if value == element]
-
-    def getPutAnswer(self, question, parts, position):
-        func_start_time = time.time()
+    def getPutAnswer(self, question, parts):
         found_answers = []
         indices = self._build_word_indexes.get(question, [])
         if not indices:
-            self._log(f"    - [getPutAnswer] 未找到答案 (总耗时: {time.time() - func_start_time:.4f}s)")
             return []
 
         build_word_section = self.newDATA.get("构词法", [])
@@ -387,16 +354,9 @@ class SearchResult:
 
             derived_parts_to_click = [p for p in full_word_parts if p != question]
             if all(p in parts for p in derived_parts_to_click):
-                candidate = {"word": "".join(full_word_parts), "parts_to_click": derived_parts_to_click}
-                found_answers.append(candidate)
-                self._log(f"    - [getPutAnswer] 找到候选答案: {candidate['word']}")
+                found_answers.append({"word": "".join(full_word_parts), "parts_to_click": derived_parts_to_click})
 
-        if found_answers:
-            self._log(f"    - [getPutAnswer] 查找完毕，共找到 {len(found_answers)} 个候选 (总耗时: {time.time() - func_start_time:.4f}s)")
-            return found_answers
-
-        self._log(f"    - [getPutAnswer] 未找到答案 (总耗时: {time.time() - func_start_time:.4f}s)")
-        return []
+        return found_answers
 
     def getChinesetoEnglish(self, question):
         return self._query_answers(self._chinese_to_english_map, question)
