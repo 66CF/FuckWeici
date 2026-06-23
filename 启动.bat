@@ -5,6 +5,16 @@ title VictorApp Launcher
 cls
 set "PATH=%PATH%;%LOCALAPPDATA%\Microsoft\WinGet\Links"
 
+where adb >nul 2>nul
+if errorlevel 1 (
+    for /f "delims=" %%D in ('dir /s /b "%LOCALAPPDATA%\Microsoft\WinGet\Packages\*adb.exe" 2^>nul') do (
+        set "PATH=%PATH%;%%~dpD"
+        goto :adb_ready
+    )
+    echo [WARN] adb not found. Please run 安装依赖.bat first or install Android Platform Tools.
+)
+:adb_ready
+
 where uv >nul 2>nul
 if errorlevel 1 goto :uv_missing
 
