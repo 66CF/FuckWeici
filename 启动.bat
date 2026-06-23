@@ -14,7 +14,7 @@ if errorlevel 1 (
 
 where adb >nul 2>nul
 if errorlevel 1 (
-    echo [WARN] adb not found. Please run 安装依赖.bat first or install Android Platform Tools.
+    echo [WARN] adb not found. Run the dependency installer BAT first, or install Android Platform Tools.
 )
 
 where uv >nul 2>nul
