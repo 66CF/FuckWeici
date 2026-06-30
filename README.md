@@ -40,7 +40,7 @@ uv sync
 3. 双击 `启动.bat`，或执行：
 
 ```bash
-uv run python VictorApp.py
+uv run python main.py
 ```
 
 4. 在 gum 选择菜单中选择答题间隔时间（默认 2 秒），确认后脚本开始自动答题
@@ -54,13 +54,13 @@ uv run python VictorApp.py
 ## 项目结构
 
 ```
-├── VictorApp.py          # 主入口，设备连接、题型识别、答题调度
-├── SearchResult.py       # 题库加载、索引构建、答案查询
-├── test_search_result.py # 单元测试
-├── pyproject.toml        # 项目元数据与依赖
-├── 启动.bat              # Windows 启动脚本
-├── 安装依赖.bat          # Windows 自动安装脚本
-└── db/                   # SQLite 题库目录
+├── main.py              # 主入口：配置、设备抽象、答题策略、CLI 编排
+├── database.py          # 题库加载、数据模型、索引构建、答案查询
+├── test_database.py     # 单元测试
+├── pyproject.toml       # 项目元数据与依赖
+├── 启动.bat             # Windows 启动脚本
+├── 安装依赖.bat         # Windows 自动安装脚本
+└── db/                  # SQLite 题库目录
 ```
 
 ## 依赖

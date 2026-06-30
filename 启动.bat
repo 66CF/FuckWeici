@@ -28,7 +28,7 @@ if not exist "%UV_CACHE_DIR%" mkdir "%UV_CACHE_DIR%" >nul 2>nul
 set "UV_PYTHON_INSTALL_DIR=%~dp0.tmp\uv-python"
 if not exist "%UV_PYTHON_INSTALL_DIR%" mkdir "%UV_PYTHON_INSTALL_DIR%" >nul 2>nul
 
-uv run python VictorApp.py
+uv run python main.py
 if errorlevel 1 goto :run_fail
 exit /b 0
 
