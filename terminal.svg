@@ -1,83 +1,96 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="320" font-family="'Cascadia Code', 'Consolas', monospace" font-size="13">
-  <!-- Window frame -->
-  <rect width="720" height="320" rx="8" fill="#0C0C0C"/>
-  <!-- Title bar (Windows 11 style) -->
-  <rect width="720" height="32" rx="8" fill="#202020"/>
-  <rect y="14" width="720" height="18" fill="#202020"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="390" font-family="'Cascadia Code', 'Consolas', monospace" font-size="13">
+  <!-- Window -->
+  <rect width="760" height="390" rx="8" fill="#012456"/>
+  <!-- Title bar -->
+  <rect width="760" height="32" rx="8" fill="#0f0f0f"/>
+  <rect y="14" width="760" height="18" fill="#0f0f0f"/>
   <!-- Tab -->
-  <rect x="8" y="6" width="140" height="22" rx="4" fill="#181818"/>
-  <text x="48" y="21" fill="#CCCCCC" font-size="11">PowerShell</text>
+  <rect x="8" y="6" width="160" height="22" rx="4" fill="#1a1a2e"/>
+  <text x="20" y="21" fill="#CCCCCC" font-size="11">⚡ PowerShell 7</text>
   <!-- Window controls -->
-  <text x="640" y="21" fill="#999" font-size="14">─ □ ×</text>
+  <rect x="660" y="4" width="30" height="24" fill="transparent"/>
+  <rect x="690" y="4" width="30" height="24" fill="transparent"/>
+  <rect x="720" y="4" width="36" height="24" fill="transparent"/>
+  <text x="672" y="21" fill="#999" font-size="12">─</text>
+  <text x="702" y="21" fill="#999" font-size="12">□</text>
+  <text x="732" y="21" fill="#999" font-size="12">×</text>
 
-  <!-- Content -->
-  <text x="16" y="60">
-    <rect x="16" y="48" width="42" height="18" rx="3" fill="#7DD3FC"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> INFO </tspan>
+  <!-- PowerShell banner -->
+  <text x="16" y="58" fill="#CCCCCC" font-size="12">Windows PowerShell</text>
+  <text x="16" y="74" fill="#CCCCCC" font-size="12">Copyright (C) Microsoft Corporation. All rights reserved.</text>
+  <text x="16" y="90" fill="#CCCCCC" font-size="12">Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows</text>
+
+  <!-- PS Prompt + Command -->
+  <text x="16" y="120">
+    <tspan fill="#F9E2AF">PS</tspan>
+    <tspan fill="#CCCCCC"> C:\Users\Qty\Desktop\FuckWeici&gt;</tspan>
+    <tspan fill="#CCCCCC"> uv run python main.py</tspan>
+  </text>
+
+  <!-- Blank line -->
+  <text x="16" y="144" fill="#CCCCCC"> </text>
+
+  <!-- Gum output -->
+  <text x="16" y="168">
+    <rect x="16" y="156" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#012456" font-weight="bold"> INFO </tspan>
     <tspan fill="#94A3B8"> 启动: </tspan>
     <tspan fill="#CCCCCC">FuckWeici 已启动</tspan>
   </text>
 
-  <text x="16" y="84">
-    <rect x="16" y="72" width="42" height="18" rx="3" fill="#7DD3FC"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> INFO </tspan>
+  <text x="16" y="192">
+    <rect x="16" y="180" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#012456" font-weight="bold"> INFO </tspan>
     <tspan fill="#94A3B8"> 环境: </tspan>
     <tspan fill="#CCCCCC">设备=emulator-5554</tspan>
   </text>
 
-  <text x="16" y="108">
-    <rect x="16" y="96" width="42" height="18" rx="3" fill="#7DD3FC"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> INFO </tspan>
+  <text x="16" y="216">
+    <rect x="16" y="204" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#012456" font-weight="bold"> INFO </tspan>
     <tspan fill="#94A3B8"> 环境: </tspan>
     <tspan fill="#CCCCCC">题库=db/weici_ext459.db</tspan>
   </text>
 
-  <text x="16" y="132">
-    <rect x="16" y="120" width="42" height="18" rx="3" fill="#7DD3FC"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> INFO </tspan>
-    <tspan fill="#94A3B8"> 环境: </tspan>
-    <tspan fill="#CCCCCC">答题间隔=0.50s 包名=com.android.weici.senior.student</tspan>
-  </text>
-
-  <text x="16" y="156">
-    <rect x="16" y="144" width="42" height="18" rx="3" fill="#7DD3FC"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> INFO </tspan>
+  <text x="16" y="240">
+    <rect x="16" y="228" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#012456" font-weight="bold"> INFO </tspan>
     <tspan fill="#94A3B8"> 提示: </tspan>
     <tspan fill="#CCCCCC">进入维词答题界面后确认开始</tspan>
   </text>
 
-  <text x="16" y="188">
-    <rect x="16" y="176" width="42" height="18" rx="3" fill="#F9E2AF"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> WARN </tspan>
+  <text x="16" y="264">
+    <rect x="16" y="252" width="42" height="18" rx="3" fill="#F9E2AF"/>
+    <tspan fill="#012456" font-weight="bold"> WARN </tspan>
     <tspan fill="#94A3B8"> 等待: </tspan>
     <tspan fill="#CCCCCC">请把设备停留在答题界面。准备好后按回车。</tspan>
   </text>
 
-  <text x="16" y="220">
-    <rect x="16" y="208" width="42" height="18" rx="3" fill="#7DD3FC"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> INFO </tspan>
+  <text x="16" y="288">
+    <rect x="16" y="276" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#012456" font-weight="bold"> INFO </tspan>
     <tspan fill="#94A3B8"> 题目: </tspan>
     <tspan fill="#CCCCCC">1/100 大杂烩</tspan>
   </text>
 
-  <text x="16" y="244">
-    <rect x="16" y="232" width="42" height="18" rx="3" fill="#7DD3FC"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> INFO </tspan>
+  <text x="16" y="312">
+    <rect x="16" y="300" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#012456" font-weight="bold"> INFO </tspan>
     <tspan fill="#94A3B8"> 命中: </tspan>
     <tspan fill="#a6e3a1">faithfully</tspan>
     <tspan fill="#94A3B8"> · 题库直出</tspan>
   </text>
 
-  <text x="16" y="268">
-    <rect x="16" y="256" width="42" height="18" rx="3" fill="#7DD3FC"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> INFO </tspan>
+  <text x="16" y="336">
+    <rect x="16" y="324" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#012456" font-weight="bold"> INFO </tspan>
     <tspan fill="#94A3B8"> 题目: </tspan>
     <tspan fill="#CCCCCC">2/100 英译汉</tspan>
   </text>
 
-  <text x="16" y="292">
-    <rect x="16" y="280" width="42" height="18" rx="3" fill="#7DD3FC"/>
-    <tspan fill="#0C0C0C" font-weight="bold"> INFO </tspan>
+  <text x="16" y="360">
+    <rect x="16" y="348" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#012456" font-weight="bold"> INFO </tspan>
     <tspan fill="#94A3B8"> 命中: </tspan>
     <tspan fill="#a6e3a1">注意；专心</tspan>
     <tspan fill="#94A3B8"> · attention</tspan>
