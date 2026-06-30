@@ -6,7 +6,7 @@
 
 <div align="center">
 
-<img src="terminal.svg" alt="FuckWeici Demo" width="680"/>
+<img src="https://raw.githubusercontent.com/66CF/FuckWeici/main/terminal.svg?v=1" alt="FuckWeici Demo" width="680"/>
 
 </div>
 
