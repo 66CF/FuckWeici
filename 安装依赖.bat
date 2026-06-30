@@ -8,75 +8,78 @@ set "PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn"
 
 echo [INFO] Using CN mirror: %UV_INDEX_URL%
 
+rem ── 检查 winget ──
+where winget >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] winget not found. Please install uv, adb, and gum manually.
+    pause
+    exit /b 1
+)
+
+rem ── 安装 uv ──
 where uv >nul 2>nul
 if errorlevel 1 (
-    echo [INFO] uv not found, trying to install via winget...
-    where winget >nul 2>nul
-    if errorlevel 1 (
-        echo [ERROR] winget not found. Please install uv manually.
-        pause
-        exit /b 1
-    )
+    echo [INFO] uv not found, installing via winget...
     winget install --id=astral-sh.uv -e --accept-package-agreements --accept-source-agreements
     if errorlevel 1 (
-        echo [ERROR] Failed to install uv automatically.
+        echo [ERROR] Failed to install uv.
         pause
         exit /b 1
     )
 )
 
+rem ── 安装 adb ──
 where adb >nul 2>nul
 if errorlevel 1 (
-    echo [INFO] adb not found, trying to install Android Platform Tools via winget...
-    where winget >nul 2>nul
-    if errorlevel 1 (
-        echo [ERROR] winget not found. Please install adb manually.
-        pause
-        exit /b 1
-    )
-
+    echo [INFO] adb not found, installing Android Platform Tools via winget...
     winget install --id=Google.PlatformTools -e --accept-package-agreements --accept-source-agreements
     if errorlevel 1 (
         winget install --id=Google.AndroidSDK.PlatformTools -e --accept-package-agreements --accept-source-agreements
         if errorlevel 1 (
-            echo [ERROR] Failed to install adb automatically.
+            echo [ERROR] Failed to install adb.
             pause
             exit /b 1
         )
     )
 )
 
+rem ── 补救 PATH（WinGet 安装后可能不在 PATH）──
 where adb >nul 2>nul
 if errorlevel 1 (
     for /f "delims=" %%D in ('dir /s /b "%LOCALAPPDATA%\Microsoft\WinGet\Packages\*adb.exe" 2^>nul') do (
-        set "ADB_DIR=%%~dpD"
+        set "PATH=%PATH%;%%~dpD"
     )
-    if defined ADB_DIR (
-        set "PATH=%PATH%;%ADB_DIR%"
-        echo [INFO] adb found at: %ADB_DIR%
-    ) else (
+    where adb >nul 2>nul
+    if errorlevel 1 (
         echo [WARN] adb installed but not in PATH. You may need to restart your terminal.
     )
 )
 
+rem ── 安装 gum ──
 where gum >nul 2>nul
 if errorlevel 1 (
-    echo [INFO] gum not found, trying to install via winget...
-    where winget >nul 2>nul
-    if errorlevel 1 (
-        echo [ERROR] winget not found. Please install gum manually.
-        pause
-        exit /b 1
-    )
-
+    echo [INFO] gum not found, installing via winget...
     winget install --id=charmbracelet.gum -e --accept-package-agreements --accept-source-agreements
     if errorlevel 1 (
-        echo [ERROR] Failed to install gum automatically.
+        echo [ERROR] Failed to install gum.
         pause
         exit /b 1
     )
 )
 
+rem ── 补救 gum PATH ──
+where gum >nul 2>nul
+if errorlevel 1 (
+    for /f "delims=" %%D in ('dir /s /b "%LOCALAPPDATA%\Microsoft\WinGet\Packages\*gum.exe" 2^>nul') do (
+        set "PATH=%PATH%;%%~dpD"
+    )
+    where gum >nul 2>nul
+    if errorlevel 1 (
+        echo [WARN] gum installed but not in PATH. You may need to restart your terminal.
+    )
+)
+
+rem ── 同步依赖 ──
 echo [INFO] Running uv sync with CN mirror...
 uv sync
 if errorlevel 1 (

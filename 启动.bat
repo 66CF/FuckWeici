@@ -1,10 +1,11 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title VictorApp Launcher
+title FuckWeici
 cls
 set "PATH=%PATH%;%LOCALAPPDATA%\Microsoft\WinGet\Links"
 
+rem ── 补救 adb PATH ──
 where adb >nul 2>nul
 if errorlevel 1 (
     for /f "delims=" %%D in ('dir /s /b "%LOCALAPPDATA%\Microsoft\WinGet\Packages\*adb.exe" 2^>nul') do (
@@ -14,7 +15,9 @@ if errorlevel 1 (
 
 where adb >nul 2>nul
 if errorlevel 1 (
-    echo [WARN] adb not found. Run the dependency installer BAT first, or install Android Platform Tools.
+    echo [ERROR] adb not found. Run the dependency installer BAT first.
+    pause
+    exit /b 1
 )
 
 where uv >nul 2>nul
