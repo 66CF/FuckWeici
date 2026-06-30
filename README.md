@@ -6,7 +6,7 @@
 
 <div align="center">
 
-![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&pause=1000&color=3DDC84&center=true&vCenter=true&width=700&height=220&lines=INFO+%E5%90%AF%E5%8A%A8:+FuckWeici+%E5%B7%B2%E5%90%AF%E5%8A%A8;INFO+%E7%8E%AF%E5%A2%83:+%E8%AE%BE%E5%A4%87%3Demulator-5554;INFO+%E6%8F%90%E7%A4%BA:+%E8%BF%9B%E5%85%A5%E7%BB%B4%E8%AF%8D%E7%AD%94%E9%A2%98%E7%95%8C%E9%9D%A2%E5%90%8E%E7%A1%AE%E8%AE%A4%E5%BC%80%E5%A7%8B;INFO+%E9%A2%98%E7%9B%AE:+1%2F100+%E5%A4%A7%E6%9D%82%E7%83%A9;INFO+%E5%91%BD%E4%B8%AD:+faithfully+%C2%B7+%E9%A2%98%E5%BA%93%E7%9B%B4%E5%87%BA;INFO+%E9%A2%98%E7%9B%AE:+2%2F100+%E8%8B%B1%E8%AF%91%E6%B1%89;INFO+%E5%91%BD%E4%B8%AD:+%E6%B3%A8%E6%84%8F%EF%BC%9B%E4%B8%93%E5%BF%83+%C2%B7+attention)
+<img src="terminal.svg" alt="FuckWeici Demo" width="680"/>
 
 </div>
 
