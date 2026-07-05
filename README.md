@@ -4,12 +4,6 @@
 
 维词（Weici）App 自动答题脚本，基于 uiautomator2 实现 Android 端自动化，通过本地题库数据库匹配答案并自动点击。
 
-<div align="center">
-
-<img src="https://raw.githubusercontent.com/66CF/FuckWeici/main/terminal.svg?v=1" alt="FuckWeici Demo" width="680"/>
-
-</div>
-
 ## 支持的题型
 
 | 类型 | 说明 |
