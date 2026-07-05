@@ -42,15 +42,6 @@ flowchart LR
 
 支持「万词王」无尽模式（100 题/关）自动检测。
 
-## 环境要求
-
-- Windows 系统
-- Python 3.12+
-- [gum](https://github.com/charmbracelet/gum) 终端交互工具（安装脚本会自动检测并尝试安装）
-- Android 设备（已开启 USB 调试并连接 ADB）或 [MuMu 模拟器](https://mumu.163.com/)
-- 已安装维词 App（包名 `com.android.weici.senior.student`）
-  - [维词 APK 下载](https://imtt.dd.qq.com/sjy.00022/sjy.00004/16891/apk/EC254B9AAA616B4D96F4C304CFA5F3EF.apk)
-
 ## 安装与运行
 
 <p>
@@ -61,7 +52,7 @@ flowchart LR
 
 1. 点击 `Code → Download ZIP` 下载项目并解压。
 2. 双击 `安装依赖.bat` 安装 `uv`、`adb`、`gum` 和项目依赖。
-3. 打开 MuMu 模拟器或安卓手机，进入维词 App 的答题页面。真机需要先开启 USB 调试并授权电脑连接。
+3. 打开[MuMu 模拟器](https://mumu.163.com/)或安卓手机，进入[维词](https://imtt.dd.qq.com/sjy.00022/sjy.00004/16891/apk/EC254B9AAA616B4D96F4C304CFA5F3EF.apk)的答题页面。真机需要先开启 USB 调试并授权电脑连接。
 4. 双击 `启动.bat`，按提示选择答题间隔。第一次建议选 `2 秒`。
 
 ## 配置
