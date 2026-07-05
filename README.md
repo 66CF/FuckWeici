@@ -30,7 +30,7 @@ flowchart LR
     P -->|否| Q[退出]
 ```
 
-## 安装与运行
+# 安装与运行
 
 <p>
   <a href="https://github.com/66CF/FuckWeici/archive/refs/heads/main.zip">
