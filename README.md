@@ -51,27 +51,18 @@ flowchart LR
 - 已安装维词 App（包名 `com.android.weici.senior.student`）
   - [维词 APK 下载](https://imtt.dd.qq.com/sjy.00022/sjy.00004/16891/apk/EC254B9AAA616B4D96F4C304CFA5F3EF.apk)
 
-## 安装
+## 安装与运行
 
-双击 `安装依赖.bat`，脚本会自动检测并安装 `uv`、`adb`、`gum`，然后同步项目依赖。
+<p>
+  <a href="https://github.com/66CF/FuckWeici/archive/refs/heads/main.zip">
+    <img src="https://img.shields.io/badge/下载项目-ZIP-2ea44f?style=for-the-badge" alt="下载项目 ZIP">
+  </a>
+</p>
 
-或手动执行：
-
-```bash
-uv sync
-```
-
-## 运行
-
-1. 用 USB 连接 Android 设备，确保 ADB 已授权
-2. 在手机上打开维词 App，进入答题页面
-3. 双击 `启动.bat`，或执行：
-
-```bash
-uv run python main.py
-```
-
-4. 在 gum 选择菜单中选择答题间隔时间（默认 2 秒），确认后脚本开始自动答题
+1. 点击 `Code → Download ZIP` 下载项目并解压。
+2. 双击 `安装依赖.bat` 安装 `uv`、`adb`、`gum` 和项目依赖。
+3. 打开 MuMu 模拟器或安卓手机，进入维词 App 的答题页面。真机需要先开启 USB 调试并授权电脑连接。
+4. 双击 `启动.bat`，按提示选择答题间隔。第一次建议选 `2 秒`。
 
 ## 配置
 
