@@ -1,0 +1,9 @@
+[project]
+name = "fuckweici"
+version = "0.1.0"
+description = "基于 uiautomator2 的维词安卓自动答题脚本"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "uiautomator2",
+]
