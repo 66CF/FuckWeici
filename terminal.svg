@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="300" font-family="'Fira Code', 'Cascadia Code', monospace" font-size="13">
+  <!-- Background -->
+  <rect width="680" height="300" rx="8" fill="#1e1e2e"/>
+
+  <!-- Gum output -->
+  <text x="20" y="36">
+    <rect x="20" y="24" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#1e1e2e" font-weight="bold"> INFO </tspan>
+    <tspan fill="#94A3B8"> 启动: </tspan>
+    <tspan fill="#cdd6f4">FuckWeici 已启动</tspan>
+  </text>
+
+  <text x="20" y="62">
+    <rect x="20" y="50" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#1e1e2e" font-weight="bold"> INFO </tspan>
+    <tspan fill="#94A3B8"> 环境: </tspan>
+    <tspan fill="#cdd6f4">设备=emulator-5554</tspan>
+  </text>
+
+  <text x="20" y="88">
+    <rect x="20" y="76" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#1e1e2e" font-weight="bold"> INFO </tspan>
+    <tspan fill="#94A3B8"> 环境: </tspan>
+    <tspan fill="#cdd6f4">题库=db/weici_ext459.db</tspan>
+  </text>
+
+  <text x="20" y="114">
+    <rect x="20" y="102" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#1e1e2e" font-weight="bold"> INFO </tspan>
+    <tspan fill="#94A3B8"> 提示: </tspan>
+    <tspan fill="#cdd6f4">进入维词答题界面后确认开始</tspan>
+  </text>
+
+  <text x="20" y="148">
+    <rect x="20" y="136" width="42" height="18" rx="3" fill="#F9E2AF"/>
+    <tspan fill="#1e1e2e" font-weight="bold"> WARN </tspan>
+    <tspan fill="#94A3B8"> 等待: </tspan>
+    <tspan fill="#cdd6f4">请把设备停留在答题界面。准备好后按回车。</tspan>
+  </text>
+
+  <text x="20" y="182">
+    <rect x="20" y="170" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#1e1e2e" font-weight="bold"> INFO </tspan>
+    <tspan fill="#94A3B8"> 题目: </tspan>
+    <tspan fill="#cdd6f4">1/100 大杂烩</tspan>
+  </text>
+
+  <text x="20" y="208">
+    <rect x="20" y="196" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#1e1e2e" font-weight="bold"> INFO </tspan>
+    <tspan fill="#94A3B8"> 命中: </tspan>
+    <tspan fill="#a6e3a1">faithfully</tspan>
+    <tspan fill="#94A3B8"> · 题库直出</tspan>
+  </text>
+
+  <text x="20" y="234">
+    <rect x="20" y="222" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#1e1e2e" font-weight="bold"> INFO </tspan>
+    <tspan fill="#94A3B8"> 题目: </tspan>
+    <tspan fill="#cdd6f4">2/100 英译汉</tspan>
+  </text>
+
+  <text x="20" y="260">
+    <rect x="20" y="248" width="42" height="18" rx="3" fill="#7DD3FC"/>
+    <tspan fill="#1e1e2e" font-weight="bold"> INFO </tspan>
+    <tspan fill="#94A3B8"> 命中: </tspan>
+    <tspan fill="#a6e3a1">注意；专心</tspan>
+    <tspan fill="#94A3B8"> · attention</tspan>
+  </text>
+</svg>
